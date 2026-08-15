@@ -1,1 +1,28 @@
 @import "tailwindcss";
+
+.input-field {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  background-color: #ffffff;
+  border: 1px solid #e7e5e4;
+  border-radius: 0.75rem;
+  color: #1c1917;
+  outline: none;
+  transition: all 0.15s ease-in-out;
+}
+
+.input-field:focus {
+  border-color: #8b5e34;
+  box-shadow: 0 0 0 2px rgba(139, 94, 52, 0.15);
+}
+
+/* Hide scrollbar for clean tab scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
