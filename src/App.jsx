@@ -312,4 +312,64 @@ function DashboardView({ products, sales, customers }) {
           <h3 className="font-serif font-semibold text-stone-900 mb-3">Category Revenue — Last 30 Days</h3>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={catData}>
-              <CartesianGrid strokeDa
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E7E5E4" />
+              <XAxis dataKey="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#A8A29E" }} dy={10} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#A8A29E" }} />
+              <Tooltip cursor={{ fill: "#F5F5F4" }} contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }} />
+              <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
+                {catData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[entry.category] || ACCENT} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-xl border border-stone-200 p-4">
+          <h3 className="font-serif font-semibold text-stone-900 mb-3">Low Stock Alerts</h3>
+          {lowStock.length === 0 ? (
+            <p className="text-sm text-stone-500">All products are sufficiently stocked.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {lowStock.slice(0, 5).map(p => (
+                <div key={p.id} className="flex justify-between items-center text-sm border-b border-stone-100 pb-2 last:border-0 last:pb-0">
+                  <div>
+                    <div className="font-medium text-stone-800">{p.name}</div>
+                    <div className="text-xs text-stone-400">SKU: {p.sku}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-red-600 font-medium">{p.stock} left</div>
+                    <div className="text-xs text-stone-400">Reorder at {p.reorder}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [products] = useState(SEED_PRODUCTS);
+  const [sales] = useState(SEED_SALES);
+  const [customers] = useState(SEED_CUSTOMERS);
+
+  return (
+    <div className="min-h-screen bg-[#FDFDFC] text-stone-800 font-sans">
+      <Header />
+      <NavTabs active={activeTab} onChange={setActiveTab} />
+      <main className="max-w-6xl mx-auto px-4 py-6">
+        {activeTab === "dashboard" && <DashboardView products={products} sales={sales} customers={customers} />}
+        {activeTab !== "dashboard" && (
+          <div className="flex flex-col items-center justify-center py-20 text-stone-400">
+            <h2 className="text-lg font-medium mb-2 capitalize">{activeTab} View</h2>
+            <p className="text-sm">This module is under development.</p>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
