@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import {
   Plus, Search, Truck, CheckCircle2, Clock, PackageCheck,
-  AlertTriangle, Trash2
+  AlertTriangle, Trash2, Download
 } from "lucide-react";
 import {
   fmtINR, fmtDate, purchaseTotal, supplierName, genId
 } from "../data/seedData";
+import { exportToCSV } from "../utils/exportUtils";
 import { Modal, Badge, SearchInput, Field } from "./UIComponents";
 
 export function PurchasesView({ purchases, suppliers, products, onAddPurchase, onMarkReceived }) {
@@ -31,6 +32,32 @@ export function PurchasesView({ purchases, suppliers, products, onAddPurchase, o
 
   const totalPurchasesCost = purchases.reduce((sum, p) => sum + purchaseTotal(p), 0);
   const pendingPurchases = purchases.filter((p) => p.status === "Pending");
+
+  const handleExportCSV = () => {
+    const headers = [
+      "Purchase Order ID",
+      "Date",
+      "Supplier Name",
+      "Delivery Status",
+      "Total Garments Count",
+      "Total Inward Cost (INR)",
+    ];
+
+    const rows = filteredPurchases.map((po) => {
+      const sup = suppliers.find((s) => s.id === po.supplierId);
+      const totalUnits = po.items.reduce((acc, it) => acc + it.qty, 0);
+      return [
+        po.id,
+        po.date,
+        sup ? sup.name : "Unknown Supplier",
+        po.status,
+        totalUnits,
+        purchaseTotal(po),
+      ];
+    });
+
+    exportToCSV(`vastra_purchases_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  };
 
   const handleAddItem = () => {
     const p = products[0];
@@ -129,19 +156,29 @@ export function PurchasesView({ purchases, suppliers, products, onAddPurchase, o
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            setSupplierId(suppliers[0]?.id || "");
-            setStatus("Received");
-            setItems([
-              { productId: products[0]?.id || "", qty: 10, cost: products[0]?.cost || 0 },
-            ]);
-            setIsModalOpen(true);
-          }}
-          className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
-        >
-          <Plus size={16} /> New Purchase Order
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCSV}
+            title="Download purchase orders as CSV"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-all border border-stone-200 flex-shrink-0"
+          >
+            <Download size={15} /> Export CSV
+          </button>
+
+          <button
+            onClick={() => {
+              setSupplierId(suppliers[0]?.id || "");
+              setStatus("Received");
+              setItems([
+                { productId: products[0]?.id || "", qty: 10, cost: products[0]?.cost || 0 },
+              ]);
+              setIsModalOpen(true);
+            }}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
+          >
+            <Plus size={16} /> New Purchase Order
+          </button>
+        </div>
       </div>
 
       {/* Purchases Table */}

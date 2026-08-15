@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import {
   Plus, Search, Store, Phone, Mail, MapPin, Truck,
-  Pencil, Trash2, PackageCheck
+  Pencil, Trash2, PackageCheck, Download
 } from "lucide-react";
 import {
   fmtINR, fmtDate, purchaseTotal
 } from "../data/seedData";
+import { exportToCSV } from "../utils/exportUtils";
 import { Modal, Badge, SearchInput, Field } from "./UIComponents";
 
 export function SuppliersView({ suppliers, purchases, products, onAddSupplier, onUpdateSupplier, onDeleteSupplier }) {
@@ -43,6 +44,35 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
   });
 
   const totalProcuredOverall = purchases.reduce((sum, p) => sum + purchaseTotal(p), 0);
+
+  const handleExportCSV = () => {
+    const headers = [
+      "Supplier ID",
+      "Vendor Name",
+      "Supplied Categories",
+      "Location",
+      "Phone",
+      "Email",
+      "Total Orders Placed",
+      "Total Procured Volume (INR)",
+    ];
+
+    const rows = filteredSuppliers.map((s) => {
+      const stats = supplierStats.find((st) => st.id === s.id) || { ordersCount: 0, totalVolume: 0 };
+      return [
+        s.id,
+        s.name,
+        s.category,
+        s.location,
+        s.phone,
+        s.email || "N/A",
+        stats.ordersCount,
+        stats.totalVolume,
+      ];
+    });
+
+    exportToCSV(`vastra_suppliers_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  };
 
   const handleOpenAdd = () => {
     setEditingSupplier(null);
@@ -110,12 +140,22 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
           placeholder="Search by vendor name, category, or city..."
         />
 
-        <button
-          onClick={handleOpenAdd}
-          className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
-        >
-          <Plus size={16} /> Register New Supplier
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCSV}
+            title="Download supplier directory as CSV"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-all border border-stone-200 flex-shrink-0"
+          >
+            <Download size={15} /> Export CSV
+          </button>
+
+          <button
+            onClick={handleOpenAdd}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
+          >
+            <Plus size={16} /> Register New Supplier
+          </button>
+        </div>
       </div>
 
       {/* Suppliers Grid */}

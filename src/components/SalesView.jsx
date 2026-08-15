@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import {
   Plus, Search, ShoppingCart, Receipt, Printer, User,
-  CheckCircle2, AlertCircle, Trash2, Calendar
+  CheckCircle2, AlertCircle, Trash2, Calendar, Download
 } from "lucide-react";
 import {
   fmtINR, fmtDate, saleTotal, customerName, genId
 } from "../data/seedData";
+import { exportToCSV } from "../utils/exportUtils";
 import { Modal, Badge, SearchInput, Field } from "./UIComponents";
 
 export function SalesView({ sales, products, customers, onAddSale }) {
@@ -31,6 +32,34 @@ export function SalesView({ sales, products, customers, onAddSale }) {
   });
 
   const totalSalesRevenue = sales.reduce((sum, s) => sum + saleTotal(s), 0);
+
+  const handleExportCSV = () => {
+    const headers = [
+      "Invoice ID",
+      "Date",
+      "Customer Name",
+      "Customer Phone",
+      "Payment Mode",
+      "Items Count",
+      "Total Amount (INR)",
+    ];
+
+    const rows = filteredSales.map((s) => {
+      const cust = customers.find((c) => c.id === s.customerId);
+      const totalUnits = s.items.reduce((acc, it) => acc + it.qty, 0);
+      return [
+        s.id,
+        s.date,
+        cust ? cust.name : "Walk-in Customer",
+        cust ? cust.phone : "N/A",
+        s.paymentMode,
+        totalUnits,
+        saleTotal(s),
+      ];
+    });
+
+    exportToCSV(`vastra_sales_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  };
 
   const handleAddItem = () => {
     const firstProd = products[0];
@@ -134,19 +163,29 @@ export function SalesView({ sales, products, customers, onAddSale }) {
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            setSelectedCustomer("");
-            setPaymentMode("UPI");
-            setCartItems([
-              { productId: products[0]?.id || "", qty: 1, price: products[0]?.price || 0 },
-            ]);
-            setIsNewSaleOpen(true);
-          }}
-          className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
-        >
-          <Plus size={16} /> New POS Bill
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCSV}
+            title="Download sales invoices as CSV"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-all border border-stone-200 flex-shrink-0"
+          >
+            <Download size={15} /> Export CSV
+          </button>
+
+          <button
+            onClick={() => {
+              setSelectedCustomer("");
+              setPaymentMode("UPI");
+              setCartItems([
+                { productId: products[0]?.id || "", qty: 1, price: products[0]?.price || 0 },
+              ]);
+              setIsNewSaleOpen(true);
+            }}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
+          >
+            <Plus size={16} /> New POS Bill
+          </button>
+        </div>
       </div>
 
       {/* Sales Table */}

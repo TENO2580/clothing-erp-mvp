@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from "react";
 import {
   Plus, Search, Pencil, Trash2, AlertTriangle, ArrowUpDown,
-  Filter, Package, Check, RefreshCw
+  Filter, Package, Check, RefreshCw, Download
 } from "lucide-react";
 import {
   fmtINR, CATEGORY_COLORS, ACCENT, DANGER, SUCCESS, genId
 } from "../data/seedData";
+import { exportToCSV } from "../utils/exportUtils";
 import { Modal, CategoryTag, Badge, SearchInput, Field } from "./UIComponents";
 
 export function InventoryView({ products, onAddProduct, onUpdateProduct, onDeleteProduct, onAdjustStock }) {
@@ -52,6 +53,40 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
   const totalCost = products.reduce((acc, p) => acc + p.stock * p.cost, 0);
   const totalRetail = products.reduce((acc, p) => acc + p.stock * p.price, 0);
   const lowStockCount = products.filter((p) => p.stock <= p.reorder).length;
+
+  const handleExportCSV = () => {
+    const headers = [
+      "SKU",
+      "Product Name",
+      "Category",
+      "Subcategory",
+      "Size",
+      "Color",
+      "Cost Price (INR)",
+      "Selling Price (INR)",
+      "Stock Qty",
+      "Reorder Level",
+      "Total Cost Value (INR)",
+      "Total Retail Value (INR)",
+    ];
+
+    const rows = filteredProducts.map((p) => [
+      p.sku,
+      p.name,
+      p.category,
+      p.subcategory,
+      p.size,
+      p.color,
+      p.cost,
+      p.price,
+      p.stock,
+      p.reorder,
+      p.stock * p.cost,
+      p.stock * p.price,
+    ]);
+
+    exportToCSV(`vastra_inventory_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  };
 
   const handleOpenAdd = () => {
     setEditingProduct(null);
@@ -172,12 +207,22 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
           </select>
         </div>
 
-        <button
-          onClick={handleOpenAdd}
-          className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
-        >
-          <Plus size={16} /> Add Product
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCSV}
+            title="Download inventory list as CSV spreadsheet"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-all border border-stone-200 flex-shrink-0"
+          >
+            <Download size={15} /> Export CSV
+          </button>
+
+          <button
+            onClick={handleOpenAdd}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
+          >
+            <Plus size={16} /> Add Product
+          </button>
+        </div>
       </div>
 
       {/* Inventory Table */}

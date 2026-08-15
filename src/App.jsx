@@ -18,6 +18,7 @@ import {
   loadStoredData,
   saveStoredData
 } from "./data/seedData";
+import { exportToJSON } from "./utils/exportUtils";
 import { CheckCircle, AlertTriangle } from "lucide-react";
 
 export default function App() {
@@ -206,6 +207,20 @@ export default function App() {
 
   /* ------------------- Reset Demo Data ------------------- */
 
+  const handleExportAll = () => {
+    const fullBackup = {
+      timestamp: new Date().toISOString(),
+      storeName: "Vastra Fashion House",
+      products,
+      customers,
+      suppliers,
+      sales,
+      purchases,
+    };
+    exportToJSON(`vastra_erp_full_backup_${new Date().toISOString().slice(0, 10)}.json`, fullBackup);
+    showToast("Full database backup downloaded!");
+  };
+
   const handleResetDemo = () => {
     if (window.confirm("Reset all data back to initial seed state? This will restore original sample records.")) {
       setProducts(SEED_PRODUCTS);
@@ -237,7 +252,7 @@ export default function App() {
       )}
 
       {/* Header */}
-      <Header onResetDemo={handleResetDemo} />
+      <Header onResetDemo={handleResetDemo} onExportAll={handleExportAll} />
 
       {/* Navigation Bar */}
       <NavTabs active={activeTab} onChange={setActiveTab} counts={moduleCounts} />

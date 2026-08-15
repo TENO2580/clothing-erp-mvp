@@ -1,8 +1,8 @@
 import React from "react";
-import { Shirt, RotateCcw, Sparkles, Store } from "lucide-react";
-import { NAVY, ACCENT } from "../data/seedData";
+import { Shirt, RotateCcw, Sparkles, Download } from "lucide-react";
+import { NAVY } from "../data/seedData";
 
-export function Header({ onResetDemo, stats }) {
+export function Header({ onResetDemo, onExportAll }) {
   return (
     <header className="border-b border-stone-200 bg-white/90 backdrop-blur-md sticky top-0 z-30 shadow-xs">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -30,12 +30,21 @@ export function Header({ onResetDemo, stats }) {
 
         <div className="flex items-center gap-2 sm:gap-3">
           <button
+            onClick={onExportAll}
+            title="Download full ERP database backup"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-all border border-stone-200"
+          >
+            <Download size={13} />
+            <span className="hidden sm:inline">Export Backup</span>
+          </button>
+
+          <button
             onClick={onResetDemo}
             title="Reset to initial seed data"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 hover:text-stone-900 rounded-xl transition-all border border-stone-200"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-100 hover:text-stone-900 rounded-xl transition-all border border-transparent hover:border-stone-200"
           >
             <RotateCcw size={13} />
-            <span className="hidden md:inline">Reset Demo Data</span>
+            <span className="hidden md:inline">Reset Data</span>
           </button>
         </div>
       </div>

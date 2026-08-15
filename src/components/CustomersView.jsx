@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import {
   Plus, Search, Users, Phone, Mail, MapPin, ShoppingBag,
-  Pencil, Trash2, Receipt, ArrowRight, IndianRupee
+  Pencil, Trash2, Receipt, ArrowRight, IndianRupee, Download
 } from "lucide-react";
 import {
   fmtINR, fmtDate, saleTotal
 } from "../data/seedData";
+import { exportToCSV } from "../utils/exportUtils";
 import { Modal, Badge, SearchInput, Field } from "./UIComponents";
 
 export function CustomersView({ customers, sales, products, onAddCustomer, onUpdateCustomer, onDeleteCustomer }) {
@@ -45,6 +46,37 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
   });
 
   const totalClientsSpent = sales.reduce((sum, s) => sum + saleTotal(s), 0);
+
+  const handleExportCSV = () => {
+    const headers = [
+      "Customer ID",
+      "Name",
+      "Phone",
+      "Email",
+      "City",
+      "Address",
+      "Total Orders",
+      "Lifetime Spend (INR)",
+      "Last Purchase Date",
+    ];
+
+    const rows = filteredCustomers.map((c) => {
+      const stats = customerStats.find((s) => s.id === c.id) || { ordersCount: 0, totalSpent: 0, lastActive: null };
+      return [
+        c.id,
+        c.name,
+        c.phone,
+        c.email || "N/A",
+        c.city || "N/A",
+        c.address || "N/A",
+        stats.ordersCount,
+        stats.totalSpent,
+        stats.lastActive || "None",
+      ];
+    });
+
+    exportToCSV(`vastra_customers_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  };
 
   const handleOpenAdd = () => {
     setEditingCustomer(null);
@@ -114,12 +146,22 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
           placeholder="Search by client name, phone, or city..."
         />
 
-        <button
-          onClick={handleOpenAdd}
-          className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
-        >
-          <Plus size={16} /> Register New Client
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCSV}
+            title="Download client directory as CSV"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-all border border-stone-200 flex-shrink-0"
+          >
+            <Download size={15} /> Export CSV
+          </button>
+
+          <button
+            onClick={handleOpenAdd}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
+          >
+            <Plus size={16} /> Register New Client
+          </button>
+        </div>
       </div>
 
       {/* Customers Cards Grid */}
