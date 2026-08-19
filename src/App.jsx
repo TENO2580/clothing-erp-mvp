@@ -9,6 +9,7 @@ import { PurchasesView } from "./components/PurchasesView";
 import { CustomersView } from "./components/CustomersView";
 import { SuppliersView } from "./components/SuppliersView";
 import { ReportsView } from "./components/ReportsView";
+import { SettingsView } from "./components/SettingsView";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { PWAUpdateToast } from "./components/PWAUpdateToast";
 import { usePWA } from "./hooks/usePWA";
@@ -19,6 +20,7 @@ import {
   SEED_SUPPLIERS,
   SEED_SALES,
   SEED_PURCHASES,
+  DEFAULT_SETTINGS,
   loadStoredData,
   saveStoredData
 } from "./data/seedData";
@@ -31,7 +33,7 @@ export default function App() {
     try {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get("tab");
-      if (tabParam && ["dashboard", "inventory", "sales", "sales-report", "purchases", "customers", "suppliers", "reports"].includes(tabParam)) {
+      if (tabParam && ["dashboard", "inventory", "sales", "sales-report", "purchases", "customers", "suppliers", "reports", "settings"].includes(tabParam)) {
         return tabParam;
       }
     } catch (e) {}
@@ -67,6 +69,9 @@ export default function App() {
   const [purchases, setPurchases] = useState(() =>
     loadStoredData(STORAGE_KEYS.purchases, SEED_PURCHASES)
   );
+  const [settings, setSettings] = useState(() =>
+    loadStoredData(STORAGE_KEYS.settings, DEFAULT_SETTINGS)
+  );
 
   // Toast message state
   const [toast, setToast] = useState(null);
@@ -96,6 +101,10 @@ export default function App() {
   useEffect(() => {
     saveStoredData(STORAGE_KEYS.purchases, purchases);
   }, [purchases]);
+
+  useEffect(() => {
+    saveStoredData(STORAGE_KEYS.settings, settings);
+  }, [settings]);
 
   /* ------------------- Inventory Handlers ------------------- */
 
@@ -176,60 +185,64 @@ export default function App() {
 
     // If marked as Received, auto-increment stock!
     if (newPO.status === "Received") {
-      setProducts((prevProducts) => {
-        return prevProducts.map((p) => {
-          const itemBought = newPO.items.find((it) => it.productId === p.id);
-          if (itemBought) {
-            return { ...p, stock: p.stock + itemBought.qty };
-          }
-          return p;
+      setProducts((prev) => {
+        const receivedMap = {};
+        newPO.items.forEach((it) => {
+          receivedMap[it.productId] = (receivedMap[it.productId] || 0) + Number(it.qty);
+        });
+
+        return prev.map((p) => {
+          const added = receivedMap[p.id];
+          return added ? { ...p, stock: p.stock + added } : p;
         });
       });
-      showToast(`Purchase order ${newPO.id} received & inventory stock added!`);
-    } else {
-      showToast(`Purchase order ${newPO.id} created (Pending delivery)`);
     }
+
+    showToast(`Purchase Order ${newPO.id} recorded!`);
   };
 
   const handleMarkReceived = (poId) => {
     const po = purchases.find((p) => p.id === poId);
-    if (!po) return;
+    if (!po || po.status === "Received") return;
 
     // Update PO status
     setPurchases(
       purchases.map((p) => (p.id === poId ? { ...p, status: "Received" } : p))
     );
 
-    // Increment inventory stock
-    setProducts((prevProducts) => {
-      return prevProducts.map((p) => {
-        const itemBought = po.items.find((it) => it.productId === p.id);
-        if (itemBought) {
-          return { ...p, stock: p.stock + itemBought.qty };
-        }
-        return p;
+    // Auto-increment product stocks
+    setProducts((prev) => {
+      const receivedMap = {};
+      po.items.forEach((it) => {
+        receivedMap[it.productId] = (receivedMap[it.productId] || 0) + Number(it.qty);
+      });
+
+      return prev.map((p) => {
+        const added = receivedMap[p.id];
+        return added ? { ...p, stock: p.stock + added } : p;
       });
     });
 
-    showToast(`PO ${poId} marked as Received. Inventory updated!`);
+    showToast(`PO ${poId} marked as Received & Stock Updated!`);
   };
 
   /* ------------------- Customers Handlers ------------------- */
 
   const handleAddCustomer = (newCust) => {
     setCustomers([newCust, ...customers]);
-    showToast(`Registered client "${newCust.name}"`);
+    showToast(`Customer "${newCust.name}" added`);
   };
 
   const handleUpdateCustomer = (updatedCust) => {
     setCustomers(customers.map((c) => (c.id === updatedCust.id ? updatedCust : c)));
-    showToast(`Updated profile for "${updatedCust.name}"`);
+    showToast(`Updated customer "${updatedCust.name}"`);
   };
 
   const handleDeleteCustomer = (id) => {
-    if (window.confirm("Are you sure you want to remove this client?")) {
-      setCustomers(customers.filter((c) => c.id !== id));
-      showToast("Client removed");
+    const c = customers.find((cust) => cust.id === id);
+    if (window.confirm(`Are you sure you want to delete ${c?.name || "this customer"}?`)) {
+      setCustomers(customers.filter((cust) => cust.id !== id));
+      showToast("Customer deleted");
     }
   };
 
@@ -237,49 +250,64 @@ export default function App() {
 
   const handleAddSupplier = (newSup) => {
     setSuppliers([newSup, ...suppliers]);
-    showToast(`Registered vendor "${newSup.name}"`);
+    showToast(`Supplier "${newSup.name}" added`);
   };
 
   const handleUpdateSupplier = (updatedSup) => {
     setSuppliers(suppliers.map((s) => (s.id === updatedSup.id ? updatedSup : s)));
-    showToast(`Updated vendor "${updatedSup.name}"`);
+    showToast(`Updated supplier "${updatedSup.name}"`);
   };
 
   const handleDeleteSupplier = (id) => {
-    if (window.confirm("Are you sure you want to remove this supplier?")) {
-      setSuppliers(suppliers.filter((s) => s.id !== id));
-      showToast("Supplier removed");
+    const s = suppliers.find((sup) => sup.id === id);
+    if (window.confirm(`Are you sure you want to delete ${s?.name || "this supplier"}?`)) {
+      setSuppliers(suppliers.filter((sup) => sup.id !== id));
+      showToast("Supplier deleted");
     }
   };
 
-  /* ------------------- Full Backup Export ------------------- */
+  /* ------------------- Settings Handlers ------------------- */
+
+  const handleUpdateSettings = (newSettings) => {
+    setSettings(newSettings);
+    showToast("System master settings updated!");
+  };
+
+  const handleResetSettings = () => {
+    if (window.confirm("Reset all dropdown options and master settings to default values?")) {
+      setSettings(DEFAULT_SETTINGS);
+      showToast("Dropdown options reset to default!");
+    }
+  };
+
+  /* ------------------- System Actions ------------------- */
+
+  const handleResetDemo = () => {
+    if (window.confirm("Reset entire ERP database to fresh demo dataset?")) {
+      localStorage.clear();
+      setProducts(SEED_PRODUCTS);
+      setCustomers(SEED_CUSTOMERS);
+      setSuppliers(SEED_SUPPLIERS);
+      setSales(SEED_SALES);
+      setPurchases(SEED_PURCHASES);
+      setSettings(DEFAULT_SETTINGS);
+      showToast("Database reset to demo state");
+    }
+  };
 
   const handleExportAll = () => {
-    const fullBackup = {
-      timestamp: new Date().toISOString(),
-      storeName: "Vastra Fashion House",
+    const allData = {
+      exportDate: new Date().toISOString(),
+      system: "Vastra Fashion ERP v3.0",
+      settings,
       products,
       customers,
       suppliers,
       sales,
       purchases,
     };
-    exportToJSON(`vastra_erp_full_backup_${new Date().toISOString().slice(0, 10)}.json`, fullBackup);
-    showToast("Full database backup downloaded!");
-  };
-
-  /* ------------------- Reset Demo Data ------------------- */
-
-  const handleResetDemo = () => {
-    if (window.confirm("Reset all data back to initial seed state? This will restore original sample records.")) {
-      setProducts(SEED_PRODUCTS);
-      setCustomers(SEED_CUSTOMERS);
-      setSuppliers(SEED_SUPPLIERS);
-      setSales(SEED_SALES);
-      setPurchases(SEED_PURCHASES);
-      localStorage.clear();
-      showToast("Demo data restored to initial state!");
-    }
+    exportToJSON(`vastra_erp_full_backup_${new Date().toISOString().slice(0, 10)}.json`, allData);
+    showToast("Full database backup exported!");
   };
 
   const moduleCounts = {
@@ -339,6 +367,7 @@ export default function App() {
         {activeTab === "inventory" && (
           <InventoryView
             products={products}
+            settings={settings}
             onAddProduct={handleAddProduct}
             onUpdateProduct={handleUpdateProduct}
             onDeleteProduct={handleDeleteProduct}
@@ -398,9 +427,19 @@ export default function App() {
 
         {activeTab === "reports" && (
           <ReportsView
-            sales={sales}
             products={products}
+            sales={sales}
+            purchases={purchases}
             customers={customers}
+            suppliers={suppliers}
+          />
+        )}
+
+        {activeTab === "settings" && (
+          <SettingsView
+            settings={settings}
+            onUpdateSettings={handleUpdateSettings}
+            onResetSettings={handleResetSettings}
           />
         )}
       </main>

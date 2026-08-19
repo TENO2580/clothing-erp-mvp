@@ -2,21 +2,38 @@ import React, { useState, useMemo, useEffect } from "react";
 import {
   Plus, Search, Pencil, Trash2, AlertTriangle, ArrowUpDown,
   Filter, Package, Check, RefreshCw, Download, Calendar,
-  Clock, History, ShieldAlert
+  Clock, History, ShieldAlert, ChevronDown
 } from "lucide-react";
 import {
-  fmtINR, fmtDate, calcAgeingDays, CATEGORY_COLORS, ACCENT, DANGER, SUCCESS, genId
+  fmtINR, fmtDate, calcAgeingDays, DEFAULT_SETTINGS, CATEGORY_COLORS, ACCENT, DANGER, SUCCESS, genId
 } from "../data/seedData";
 import { exportToCSV } from "../utils/exportUtils";
 import { Modal, CategoryTag, Badge, SearchInput, Field, TablePagination } from "./UIComponents";
 
-export function InventoryView({ products, onAddProduct, onUpdateProduct, onDeleteProduct, onAdjustStock }) {
+export function InventoryView({
+  products,
+  settings = DEFAULT_SETTINGS,
+  onAddProduct,
+  onUpdateProduct,
+  onDeleteProduct,
+  onAdjustStock,
+}) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [stockFilter, setStockFilter] = useState("All"); // All, Low, Out, Healthy
   const [ageingFilter, setAgeingFilter] = useState("All"); // All, fresh30, mid60, slow90
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+
+  const availableSizes = settings?.sizes || DEFAULT_SETTINGS.sizes;
+  const availableColors = settings?.colors || DEFAULT_SETTINGS.colors;
+  const availableSubcats = settings?.subcategories || DEFAULT_SETTINGS.subcategories;
+  const availableDepartments = settings?.departments || DEFAULT_SETTINGS.departments;
+
+  // Custom write-in toggles
+  const [customSubcatMode, setCustomSubcatMode] = useState(false);
+  const [customSizeMode, setCustomSizeMode] = useState(false);
+  const [customColorMode, setCustomColorMode] = useState(false);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -26,13 +43,13 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
   const [form, setForm] = useState({
     name: "",
     category: "Gents",
-    subcategory: "",
-    size: "M",
-    color: "",
+    subcategory: availableSubcats[0] || "Shirts",
+    size: availableSizes[2] || "M",
+    color: availableColors[0] || "White",
     sku: "",
     cost: "",
     price: "",
-    stock: "",
+    stock: "20",
     reorder: "5",
     addedDate: new Date().toISOString().slice(0, 10),
   });
@@ -133,12 +150,15 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
 
   const handleOpenAdd = () => {
     setEditingProduct(null);
+    setCustomSubcatMode(false);
+    setCustomSizeMode(false);
+    setCustomColorMode(false);
     setForm({
       name: "",
-      category: "Gents",
-      subcategory: "Shirts",
-      size: "M",
-      color: "White",
+      category: availableDepartments[0] || "Gents",
+      subcategory: availableSubcats[0] || "Shirts",
+      size: availableSizes[2] || "M",
+      color: availableColors[0] || "White",
       sku: "GEN-NEW-" + String(products.length + 1).padStart(3, "0"),
       cost: "",
       price: "",
@@ -151,12 +171,16 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
 
   const handleOpenEdit = (p) => {
     setEditingProduct(p);
+    setCustomSubcatMode(!availableSubcats.includes(p.subcategory));
+    setCustomSizeMode(!availableSizes.includes(p.size));
+    setCustomColorMode(!availableColors.includes(p.color));
+
     setForm({
       name: p.name,
       category: p.category,
-      subcategory: p.subcategory || "",
-      size: p.size,
-      color: p.color,
+      subcategory: p.subcategory || availableSubcats[0] || "Shirts",
+      size: p.size || availableSizes[0] || "M",
+      color: p.color || availableColors[0] || "White",
       sku: p.sku,
       cost: String(p.cost),
       price: String(p.price),
@@ -271,7 +295,7 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
 
           {/* Department Category Filter */}
           <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl">
-            {["All", "Gents", "Kids", "Women"].map((cat) => (
+            {["All", ...availableDepartments].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setCategoryFilter(cat)}
@@ -480,7 +504,7 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
         />
       </div>
 
-      {/* Add / Edit Product Modal */}
+      {/* Add / Edit Product Modal with Easy Dropdowns */}
       <Modal
         open={isModalOpen}
         title={editingProduct ? "Edit Garment Style" : "Add New Garment Product"}
@@ -506,42 +530,154 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
                 className="input-field"
               >
-                <option value="Gents">Gents</option>
-                <option value="Kids">Kids</option>
-                <option value="Women">Women</option>
+                {availableDepartments.map((dept) => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
               </select>
             </Field>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Field label="Subcategory">
-              <input
-                type="text"
-                value={form.subcategory}
-                onChange={(e) => setForm({ ...form, subcategory: e.target.value })}
-                placeholder="e.g. Shirts, Kurtis, Trousers"
-                className="input-field"
-              />
+          {/* DROPDOWN SELECTORS FOR SUBCATEGORY, SIZE, COLOR */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-stone-50/70 p-3.5 rounded-2xl border border-stone-200">
+            {/* 1. Subcategory Dropdown */}
+            <Field label="Subcategory / Type" required>
+              {customSubcatMode ? (
+                <div className="space-y-1">
+                  <input
+                    type="text"
+                    required
+                    value={form.subcategory}
+                    onChange={(e) => setForm({ ...form, subcategory: e.target.value })}
+                    placeholder="Type custom subcategory..."
+                    className="input-field text-xs"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomSubcatMode(false);
+                      setForm({ ...form, subcategory: availableSubcats[0] || "Shirts" });
+                    }}
+                    className="text-[11px] text-amber-800 hover:underline font-semibold"
+                  >
+                    ← Select from list
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <select
+                    value={form.subcategory}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setCustomSubcatMode(true);
+                        setForm({ ...form, subcategory: "" });
+                      } else {
+                        setForm({ ...form, subcategory: e.target.value });
+                      }
+                    }}
+                    className="input-field text-xs font-semibold"
+                  >
+                    {availableSubcats.map((sub) => (
+                      <option key={sub} value={sub}>{sub}</option>
+                    ))}
+                    <option value="__custom__" className="text-amber-800 font-bold">+ Enter Custom Type...</option>
+                  </select>
+                </div>
+              )}
             </Field>
 
-            <Field label="Size (e.g. S, M, L, XL, 32, Free)" required>
-              <input
-                type="text"
-                required
-                value={form.size}
-                onChange={(e) => setForm({ ...form, size: e.target.value })}
-                className="input-field"
-              />
+            {/* 2. Size Dropdown */}
+            <Field label="Size (Select Preset)" required>
+              {customSizeMode ? (
+                <div className="space-y-1">
+                  <input
+                    type="text"
+                    required
+                    value={form.size}
+                    onChange={(e) => setForm({ ...form, size: e.target.value })}
+                    placeholder="e.g. 44, Free..."
+                    className="input-field text-xs"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomSizeMode(false);
+                      setForm({ ...form, size: availableSizes[0] || "M" });
+                    }}
+                    className="text-[11px] text-amber-800 hover:underline font-semibold"
+                  >
+                    ← Select from list
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <select
+                    value={form.size}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setCustomSizeMode(true);
+                        setForm({ ...form, size: "" });
+                      } else {
+                        setForm({ ...form, size: e.target.value });
+                      }
+                    }}
+                    className="input-field text-xs font-semibold font-mono"
+                  >
+                    {availableSizes.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                    <option value="__custom__" className="text-amber-800 font-bold">+ Enter Custom Size...</option>
+                  </select>
+                </div>
+              )}
             </Field>
 
-            <Field label="Color (e.g. White, Sky Blue, Maroon)" required>
-              <input
-                type="text"
-                required
-                value={form.color}
-                onChange={(e) => setForm({ ...form, color: e.target.value })}
-                className="input-field"
-              />
+            {/* 3. Color Dropdown */}
+            <Field label="Color Shade" required>
+              {customColorMode ? (
+                <div className="space-y-1">
+                  <input
+                    type="text"
+                    required
+                    value={form.color}
+                    onChange={(e) => setForm({ ...form, color: e.target.value })}
+                    placeholder="e.g. Royal Blue..."
+                    className="input-field text-xs"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomColorMode(false);
+                      setForm({ ...form, color: availableColors[0] || "White" });
+                    }}
+                    className="text-[11px] text-amber-800 hover:underline font-semibold"
+                  >
+                    ← Select from list
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <select
+                    value={form.color}
+                    onChange={(e) => {
+                      if (e.target.value === "__custom__") {
+                        setCustomColorMode(true);
+                        setForm({ ...form, color: "" });
+                      } else {
+                        setForm({ ...form, color: e.target.value });
+                      }
+                    }}
+                    className="input-field text-xs font-semibold"
+                  >
+                    {availableColors.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                    <option value="__custom__" className="text-amber-800 font-bold">+ Enter Custom Color...</option>
+                  </select>
+                </div>
+              )}
             </Field>
           </div>
 

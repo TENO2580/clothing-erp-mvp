@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  LayoutDashboard, Shirt, ShoppingCart, Truck, Users, Store, BarChart3, FileSpreadsheet
+  LayoutDashboard, Shirt, ShoppingCart, Truck, Users, Store, BarChart3, FileSpreadsheet, Settings
 } from "lucide-react";
 import { ACCENT } from "../data/seedData";
 
@@ -13,6 +13,7 @@ export const NAV_CONFIG = [
   { key: "customers", label: "Customers", icon: Users, badgeKey: "customers" },
   { key: "suppliers", label: "Suppliers", icon: Store, badgeKey: "suppliers" },
   { key: "reports", label: "Analytics", icon: BarChart3 },
+  { key: "settings", label: "Settings", icon: Settings },
 ];
 
 export function NavTabs({ active, onChange, counts = {} }) {

@@ -16,6 +16,32 @@ export const STORAGE_KEYS = {
   suppliers: "vastra_erp_suppliers_v3",
   sales: "vastra_erp_sales_v3",
   purchases: "vastra_erp_purchases_v3",
+  settings: "vastra_erp_settings_v3",
+};
+
+export const DEFAULT_SETTINGS = {
+  sizes: [
+    "XS", "S", "M", "L", "XL", "XXL", "3XL",
+    "28", "30", "32", "34", "36", "38", "40", "42",
+    "0-1Y", "2-3Y", "4-5Y", "6-7Y", "8-9Y", "10-11Y", "12-13Y",
+    "Free"
+  ],
+  colors: [
+    "White", "Black", "Navy", "Sky Blue", "Maroon", "Red", "Pink", "Teal",
+    "Olive", "Grey", "Charcoal", "Mustard", "Cream", "Golden", "Lavender",
+    "Yellow", "Dark Blue", "Beige", "Green", "Orange", "Purple"
+  ],
+  subcategories: [
+    "Shirts", "T-Shirts", "Trousers", "Jeans", "Ethnic", "Formal", "Sportswear",
+    "Dresses", "Shorts", "Uniform", "Pants", "Infant", "Leggings",
+    "Sarees", "Salwar Suits", "Kurtis", "Tops", "Bottoms", "Jackets", "Nightwear", "Blouses"
+  ],
+  departments: ["Gents", "Kids", "Women"],
+  storeName: "Vastra Fashion House",
+  tagline: "Gents · Kids · Women — Multi-Category Retail Operations",
+  gstin: "32AAAAA0000A1Z5",
+  contactPhone: "+91 98460 12345",
+  storeLocation: "MG Road, Kochi, Kerala",
 };
 
 export const SEED_PRODUCTS = [
