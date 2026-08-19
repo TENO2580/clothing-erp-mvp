@@ -1,0 +1,62 @@
+{
+  "name": "Vastra Fashion House - ERP",
+  "short_name": "Vastra ERP",
+  "description": "Multi-Category Retail Clothing ERP & Operations Management",
+  "theme_color": "#1E2233",
+  "background_color": "#1E2233",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "any",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
+  "categories": ["business", "finance", "productivity", "shopping"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "POS Billing",
+      "short_name": "Billing",
+      "description": "Open POS Billing Counter",
+      "url": "/?tab=sales",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Inventory",
+      "short_name": "Inventory",
+      "description": "Check stock levels",
+      "url": "/?tab=inventory",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

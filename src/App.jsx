@@ -8,6 +8,9 @@ import { PurchasesView } from "./components/PurchasesView";
 import { CustomersView } from "./components/CustomersView";
 import { SuppliersView } from "./components/SuppliersView";
 import { ReportsView } from "./components/ReportsView";
+import { OfflineIndicator } from "./components/OfflineIndicator";
+import { PWAUpdateToast } from "./components/PWAUpdateToast";
+import { usePWA } from "./hooks/usePWA";
 import {
   STORAGE_KEYS,
   SEED_PRODUCTS,
@@ -22,7 +25,30 @@ import { exportToJSON } from "./utils/exportUtils";
 import { CheckCircle, AlertTriangle } from "lucide-react";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  // Read initial tab from URL shortcuts if present (?tab=sales etc.)
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (tabParam && ["dashboard", "inventory", "sales", "purchases", "customers", "suppliers", "reports"].includes(tabParam)) {
+        return tabParam;
+      }
+    } catch (e) {}
+    return "dashboard";
+  });
+
+  // PWA Hook
+  const {
+    isInstallable,
+    isInstalled,
+    isIOS,
+    isOffline,
+    justReconnected,
+    needRefresh,
+    installApp,
+    updateApp,
+    setNeedRefresh,
+  } = usePWA();
 
   // Persistent States
   const [products, setProducts] = useState(() =>
@@ -205,7 +231,7 @@ export default function App() {
     }
   };
 
-  /* ------------------- Reset Demo Data ------------------- */
+  /* ------------------- Full Backup Export ------------------- */
 
   const handleExportAll = () => {
     const fullBackup = {
@@ -220,6 +246,8 @@ export default function App() {
     exportToJSON(`vastra_erp_full_backup_${new Date().toISOString().slice(0, 10)}.json`, fullBackup);
     showToast("Full database backup downloaded!");
   };
+
+  /* ------------------- Reset Demo Data ------------------- */
 
   const handleResetDemo = () => {
     if (window.confirm("Reset all data back to initial seed state? This will restore original sample records.")) {
@@ -242,7 +270,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FBFBFA] text-stone-800 font-sans antialiased selection:bg-amber-100 selection:text-amber-900">
+    <div className="min-h-screen bg-[#FBFBFA] text-stone-800 font-sans antialiased selection:bg-amber-100 selection:text-amber-900 pb-safe">
+      {/* Offline Status Bar */}
+      <OfflineIndicator isOffline={isOffline} justReconnected={justReconnected} />
+
       {/* Toast Notification */}
       {toast && (
         <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 bg-stone-900 text-white px-4 py-2.5 rounded-2xl shadow-xl border border-stone-700 animate-in slide-in-from-bottom-3 duration-200">
@@ -251,14 +282,28 @@ export default function App() {
         </div>
       )}
 
+      {/* PWA Update Waiting Toast */}
+      <PWAUpdateToast
+        needRefresh={needRefresh}
+        onUpdate={updateApp}
+        onDismiss={() => setNeedRefresh(false)}
+      />
+
       {/* Header */}
-      <Header onResetDemo={handleResetDemo} onExportAll={handleExportAll} />
+      <Header
+        onResetDemo={handleResetDemo}
+        onExportAll={handleExportAll}
+        isInstallable={isInstallable}
+        isInstalled={isInstalled}
+        isIOS={isIOS}
+        onInstall={installApp}
+      />
 
       {/* Navigation Bar */}
       <NavTabs active={activeTab} onChange={setActiveTab} counts={moduleCounts} />
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-7xl mx-auto px-4 py-6 pl-safe pr-safe">
         {activeTab === "dashboard" && (
           <DashboardView
             products={products}
