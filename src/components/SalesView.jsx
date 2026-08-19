@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Plus, Search, ShoppingCart, Receipt, Printer, User,
   CheckCircle2, AlertCircle, Trash2, Calendar, Download
@@ -7,7 +7,7 @@ import {
   fmtINR, fmtDate, saleTotal, customerName, genId
 } from "../data/seedData";
 import { exportToCSV } from "../utils/exportUtils";
-import { Modal, Badge, SearchInput, Field } from "./UIComponents";
+import { Modal, Badge, SearchInput, Field, TablePagination } from "./UIComponents";
 
 export function SalesView({ sales, products, customers, onAddSale }) {
   const [search, setSearch] = useState("");
@@ -15,12 +15,21 @@ export function SalesView({ sales, products, customers, onAddSale }) {
   const [isNewSaleOpen, setIsNewSaleOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   // New Sale Form State
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [paymentMode, setPaymentMode] = useState("UPI");
   const [cartItems, setCartItems] = useState([
     { productId: products[0]?.id || "", qty: 1, price: products[0]?.price || 0 },
   ]);
+
+  // Reset to page 1 on search or filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, paymentFilter]);
 
   const filteredSales = sales.filter((s) => {
     const cust = customerName(customers, s.customerId);
@@ -30,6 +39,11 @@ export function SalesView({ sales, products, customers, onAddSale }) {
     const matchPay = paymentFilter === "All" || s.paymentMode === paymentFilter;
     return matchSearch && matchPay;
   });
+
+  const paginatedSales = filteredSales.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   const totalSalesRevenue = sales.reduce((sum, s) => sum + saleTotal(s), 0);
 
@@ -74,76 +88,80 @@ export function SalesView({ sales, products, customers, onAddSale }) {
     }
   };
 
-  const handleItemProductChange = (index, prodId) => {
-    const prod = products.find((p) => p.id === prodId);
-    if (!prod) return;
+  const handleItemChange = (index, field, value) => {
     const newItems = [...cartItems];
-    newItems[index] = {
-      productId: prodId,
-      qty: 1,
-      price: prod.price,
-    };
+    newItems[index][field] = value;
+
+    if (field === "productId") {
+      const prod = products.find((p) => p.id === value);
+      if (prod) {
+        newItems[index].price = prod.price;
+      }
+    }
     setCartItems(newItems);
   };
 
-  const handleItemQtyChange = (index, qty) => {
-    const prod = products.find((p) => p.id === cartItems[index].productId);
-    const validQty = Math.max(1, Math.min(Number(qty) || 1, prod ? prod.stock : 999));
-    const newItems = [...cartItems];
-    newItems[index].qty = validQty;
-    setCartItems(newItems);
-  };
-
-  const currentCartTotal = cartItems.reduce((sum, it) => sum + it.qty * it.price, 0);
+  const cartTotal = cartItems.reduce((sum, item) => sum + item.qty * item.price, 0);
 
   const handleCreateSale = (e) => {
     e.preventDefault();
     if (cartItems.length === 0) return;
 
+    // Check stock availability
+    for (const it of cartItems) {
+      const p = products.find((prod) => prod.id === it.productId);
+      if (p && p.stock < it.qty) {
+        alert(`Insufficient stock for "${p.name}". Available: ${p.stock}, Requested: ${it.qty}`);
+        return;
+      }
+    }
+
     const newSale = {
-      id: genId("INV"),
+      id: genId("INV-2026-", 100 + sales.length + 1),
       date: new Date().toISOString().slice(0, 10),
       customerId: selectedCustomer || null,
-      paymentMode,
       items: cartItems.map((it) => ({
         productId: it.productId,
         qty: Number(it.qty),
         price: Number(it.price),
       })),
+      paymentMode,
     };
 
     onAddSale(newSale);
     setIsNewSaleOpen(false);
-    setSelectedInvoice(newSale); // open receipt preview
+    setCartItems([{ productId: products[0]?.id || "", qty: 1, price: products[0]?.price || 0 }]);
+    setSelectedCustomer("");
+    setSelectedInvoice(newSale); // Open receipt preview immediately!
   };
 
   return (
     <div className="space-y-5">
-      {/* Top Banner Stats */}
+      {/* Top Banner */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Total Revenue Billed</div>
-          <div className="text-2xl font-bold text-stone-900 mt-1">{fmtINR(totalSalesRevenue)}</div>
-        </div>
-        <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Total Completed Invoices</div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Total Sales Completed</div>
           <div className="text-2xl font-bold text-stone-900 mt-1">{sales.length} Invoices</div>
         </div>
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Average Order Value (AOV)</div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Total Invoiced Revenue</div>
+          <div className="text-2xl font-bold text-emerald-700 mt-1">{fmtINR(totalSalesRevenue)}</div>
+        </div>
+        <div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Average Order Value</div>
           <div className="text-2xl font-bold text-amber-800 mt-1">
             {fmtINR(sales.length ? totalSalesRevenue / sales.length : 0)}
           </div>
         </div>
       </div>
 
-      {/* Actions and Filters */}
+      {/* Filter and Action Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
         <div className="flex flex-wrap items-center gap-2">
           <SearchInput
             value={search}
             onChange={setSearch}
-            placeholder="Search by Invoice # or Customer..."
+            placeholder="Search invoice number or client..."
           />
 
           <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl">
@@ -173,28 +191,21 @@ export function SalesView({ sales, products, customers, onAddSale }) {
           </button>
 
           <button
-            onClick={() => {
-              setSelectedCustomer("");
-              setPaymentMode("UPI");
-              setCartItems([
-                { productId: products[0]?.id || "", qty: 1, price: products[0]?.price || 0 },
-              ]);
-              setIsNewSaleOpen(true);
-            }}
+            onClick={() => setIsNewSaleOpen(true)}
             className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
           >
-            <Plus size={16} /> New POS Bill
+            <Plus size={16} /> New POS Invoice
           </button>
         </div>
       </div>
 
-      {/* Sales Table */}
+      {/* Sales Invoices Table */}
       <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-stone-50 text-stone-600 text-xs font-bold uppercase tracking-wider border-b border-stone-200">
               <tr>
-                <th className="px-4 py-3.5">Invoice #</th>
+                <th className="px-4 py-3.5">Invoice ID</th>
                 <th className="px-4 py-3.5">Date</th>
                 <th className="px-4 py-3.5">Customer</th>
                 <th className="px-4 py-3.5">Items Summary</th>
@@ -211,7 +222,7 @@ export function SalesView({ sales, products, customers, onAddSale }) {
                   </td>
                 </tr>
               ) : (
-                filteredSales.map((s) => {
+                paginatedSales.map((s) => {
                   const cust = customers.find((c) => c.id === s.customerId);
                   const total = saleTotal(s);
                   const totalItemsCount = s.items.reduce((acc, it) => acc + it.qty, 0);
@@ -256,6 +267,16 @@ export function SalesView({ sales, products, customers, onAddSale }) {
             </tbody>
           </table>
         </div>
+
+        {/* Table Pagination Toolbar */}
+        <TablePagination
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalItems={filteredSales.length}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[10, 30, 50, 100]}
+        />
       </div>
 
       {/* New POS Sale Modal */}
@@ -282,48 +303,45 @@ export function SalesView({ sales, products, customers, onAddSale }) {
               </select>
             </Field>
 
-            <Field label="Payment Method" required>
+            <Field label="Payment Mode">
               <select
                 value={paymentMode}
                 onChange={(e) => setPaymentMode(e.target.value)}
                 className="input-field"
               >
-                <option value="UPI">UPI / QR Code</option>
-                <option value="Cash">Cash Counter</option>
-                <option value="Card">Debit / Credit Card</option>
+                <option value="UPI">UPI (GooglePay / PhonePe / Paytm)</option>
+                <option value="Cash">Cash at Counter</option>
+                <option value="Card">Debit / Credit Card POS</option>
               </select>
             </Field>
           </div>
 
-          {/* Cart Items List */}
-          <div className="border border-stone-200 rounded-xl p-3 bg-stone-50/50 space-y-3">
-            <div className="flex items-center justify-between text-xs font-bold text-stone-700 uppercase">
-              <span>Items to Bill</span>
+          <div className="border-t border-stone-100 pt-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-stone-500">Bill Line Items</span>
               <button
                 type="button"
                 onClick={handleAddItem}
-                className="text-amber-800 hover:underline flex items-center gap-1"
+                className="text-xs font-bold text-amber-800 hover:text-amber-900 flex items-center gap-1"
               >
-                <Plus size={14} /> Add Another Item
+                <Plus size={14} /> Add Item Line
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-60 overflow-y-auto">
               {cartItems.map((item, idx) => {
-                const prod = products.find((p) => p.id === item.productId);
-                const maxStock = prod ? prod.stock : 0;
-
+                const selectedProd = products.find((p) => p.id === item.productId);
                 return (
-                  <div key={idx} className="flex items-center gap-2 bg-white p-2.5 rounded-xl border border-stone-200">
+                  <div key={idx} className="flex items-center gap-2 bg-stone-50 p-2.5 rounded-xl">
                     <div className="flex-1">
                       <select
                         value={item.productId}
-                        onChange={(e) => handleItemProductChange(idx, e.target.value)}
-                        className="w-full text-xs font-medium bg-transparent focus:outline-none"
+                        onChange={(e) => handleItemChange(idx, "productId", e.target.value)}
+                        className="input-field text-xs py-1.5"
                       >
                         {products.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.name} [{p.category}] - {p.size}/{p.color} (Stock: {p.stock}) - {fmtINR(p.price)}
+                            [{p.category}] {p.name} ({p.size}/{p.color}) — {fmtINR(p.price)} (Stock: {p.stock})
                           </option>
                         ))}
                       </select>
@@ -333,39 +351,37 @@ export function SalesView({ sales, products, customers, onAddSale }) {
                       <input
                         type="number"
                         min="1"
-                        max={maxStock}
+                        max={selectedProd ? selectedProd.stock : 999}
                         value={item.qty}
-                        onChange={(e) => handleItemQtyChange(idx, e.target.value)}
-                        className="w-full text-xs font-bold text-center border border-stone-200 rounded-lg p-1"
+                        onChange={(e) => handleItemChange(idx, "qty", Math.max(1, Number(e.target.value)))}
+                        className="input-field text-xs py-1.5 text-center font-mono"
                       />
                     </div>
 
-                    <div className="w-24 text-right font-mono font-bold text-xs text-stone-900">
+                    <div className="w-24 text-right font-bold text-stone-900 font-mono text-xs">
                       {fmtINR(item.qty * item.price)}
                     </div>
 
-                    {cartItems.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(idx)}
-                        className="p-1 text-stone-400 hover:text-rose-600 rounded-lg"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItem(idx)}
+                      disabled={cartItems.length === 1}
+                      className="p-1.5 text-stone-400 hover:text-rose-600 disabled:opacity-20"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 );
               })}
             </div>
-
-            {/* Total Calculation */}
-            <div className="flex items-center justify-between pt-2 border-t border-stone-200 font-bold text-base">
-              <span>Grand Total</span>
-              <span className="font-mono text-amber-900">{fmtINR(currentCartTotal)}</span>
-            </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-3">
+          <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-100 flex items-center justify-between">
+            <span className="font-semibold text-stone-700 text-sm">Invoice Grand Total</span>
+            <span className="text-xl font-bold text-amber-900 font-mono">{fmtINR(cartTotal)}</span>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={() => setIsNewSaleOpen(false)}
@@ -377,7 +393,7 @@ export function SalesView({ sales, products, customers, onAddSale }) {
               type="submit"
               className="px-5 py-2.5 text-xs font-bold text-white bg-amber-800 hover:bg-amber-900 rounded-xl shadow-xs"
             >
-              Generate Bill ({fmtINR(currentCartTotal)})
+              Complete Sale & Deduct Stock
             </button>
           </div>
         </form>
@@ -386,70 +402,62 @@ export function SalesView({ sales, products, customers, onAddSale }) {
       {/* Invoice Receipt Modal */}
       <Modal
         open={Boolean(selectedInvoice)}
-        title="Tax Invoice / Receipt"
+        title="POS Sales Receipt"
         onClose={() => setSelectedInvoice(null)}
       >
         {selectedInvoice && (
-          <div className="space-y-4 text-stone-800">
-            {/* Header */}
-            <div className="text-center pb-3 border-b border-dashed border-stone-300">
-              <div className="font-serif font-bold text-lg text-stone-900">Vastra Fashion House</div>
-              <div className="text-xs text-stone-500">Retail & Operations · Kerala, India</div>
-              <div className="text-xs font-mono text-stone-400 mt-1">Invoice: {selectedInvoice.id}</div>
+          <div className="space-y-4">
+            <div className="text-center pb-3 border-b border-stone-200">
+              <h2 className="font-serif text-lg font-bold text-stone-900">Vastra Fashion House</h2>
+              <p className="text-xs text-stone-500">Retail Invoice · GST Compliant</p>
+              <div className="font-mono text-xs font-bold text-stone-700 mt-1">{selectedInvoice.id}</div>
+              <div className="text-xs text-stone-400">{fmtDate(selectedInvoice.date)}</div>
             </div>
 
-            {/* Meta */}
-            <div className="text-xs space-y-1">
-              <div className="flex justify-between">
-                <span className="text-stone-400">Date:</span>
-                <span className="font-medium">{fmtDate(selectedInvoice.date)}</span>
+            <div className="text-xs text-stone-600 space-y-1">
+              <div>
+                <strong>Client: </strong>
+                {customerName(customers, selectedInvoice.customerId)}
               </div>
-              <div className="flex justify-between">
-                <span className="text-stone-400">Customer:</span>
-                <span className="font-semibold text-stone-900">
-                  {customerName(customers, selectedInvoice.customerId)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-stone-400">Payment:</span>
-                <span className="font-semibold text-emerald-700">{selectedInvoice.paymentMode}</span>
+              <div>
+                <strong>Payment Mode: </strong>
+                {selectedInvoice.paymentMode}
               </div>
             </div>
 
-            {/* Line Items */}
-            <div className="border-t border-b border-stone-100 py-3 space-y-2">
-              {selectedInvoice.items.map((it, i) => {
-                const p = products.find((prod) => prod.id === it.productId);
+            <div className="divide-y divide-stone-100 text-xs border-y border-stone-100 py-2 my-2">
+              {selectedInvoice.items.map((it, idx) => {
+                const prod = products.find((p) => p.id === it.productId);
                 return (
-                  <div key={i} className="flex justify-between text-xs">
+                  <div key={idx} className="py-2 flex items-center justify-between">
                     <div>
-                      <div className="font-semibold text-stone-900">{p ? p.name : "Product Item"}</div>
-                      <div className="text-[11px] text-stone-400">{it.qty} x {fmtINR(it.price)}</div>
+                      <div className="font-semibold text-stone-900">{prod ? prod.name : "Garment Item"}</div>
+                      <div className="text-stone-400 text-[11px]">
+                        {prod ? `${prod.size} · ${prod.color} · ` : ""}
+                        Qty: {it.qty} × {fmtINR(it.price)}
+                      </div>
                     </div>
-                    <div className="font-mono font-bold">{fmtINR(it.qty * it.price)}</div>
+                    <div className="font-mono font-bold text-stone-800">{fmtINR(it.qty * it.price)}</div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Total */}
-            <div className="flex justify-between items-center text-sm font-bold pt-1">
-              <span>Total Paid</span>
-              <span className="text-lg font-mono text-amber-900">
-                {fmtINR(saleTotal(selectedInvoice))}
-              </span>
+            <div className="flex items-center justify-between text-base font-bold text-stone-900 pt-1">
+              <span>Grand Total</span>
+              <span className="font-mono text-emerald-800">{fmtINR(saleTotal(selectedInvoice))}</span>
             </div>
 
-            <div className="pt-4 flex gap-2">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
               <button
                 onClick={() => window.print()}
-                className="flex-1 py-2 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 flex items-center justify-center gap-1.5 hover:bg-stone-50"
+                className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
               >
-                <Printer size={14} /> Print Receipt
+                <Printer size={13} /> Print Bill
               </button>
               <button
                 onClick={() => setSelectedInvoice(null)}
-                className="flex-1 py-2 rounded-xl bg-stone-900 text-white text-xs font-bold hover:bg-stone-800"
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-semibold"
               >
                 Close
               </button>

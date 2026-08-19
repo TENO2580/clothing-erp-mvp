@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Search } from "lucide-react";
+import { X, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { CATEGORY_COLORS, ACCENT } from "../data/seedData";
 
 export function Modal({ open, title, onClose, children, wide }) {
@@ -99,5 +99,73 @@ export function Field({ label, required, children, error }) {
       {children}
       {error && <span className="text-xs text-rose-500 font-medium">{error}</span>}
     </label>
+  );
+}
+
+export function TablePagination({
+  currentPage = 1,
+  pageSize = 10,
+  totalItems = 0,
+  onPageChange,
+  onPageSizeChange,
+  pageSizeOptions = [10, 30, 50, 100]
+}) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(Math.max(1, currentPage), totalPages);
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-stone-50/90 border-t border-stone-200 text-xs text-stone-600">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+        {/* Rows per page selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-stone-500 font-medium">Rows per page:</span>
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              onPageSizeChange(Number(e.target.value));
+              onPageChange(1);
+            }}
+            className="bg-white border border-stone-300 hover:border-stone-400 rounded-lg px-2.5 py-1 text-xs font-semibold text-stone-800 focus:outline-none focus:ring-2 focus:ring-amber-800/20 focus:border-amber-800 cursor-pointer shadow-2xs transition-colors"
+          >
+            {pageSizeOptions.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Page X of Y */}
+        <div className="text-stone-500 font-medium">
+          Page <strong className="text-stone-900 font-bold">{safePage}</strong> of{" "}
+          <strong className="text-stone-900 font-bold">{totalPages}</strong>
+        </div>
+
+        {/* Total Badge */}
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-stone-200/80 text-stone-800">
+          Total: {totalItems}
+        </span>
+      </div>
+
+      {/* Prev / Next Page Buttons */}
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={() => onPageChange(safePage - 1)}
+          disabled={safePage <= 1}
+          className="inline-flex items-center justify-center p-1.5 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-100 hover:text-stone-900 disabled:opacity-35 disabled:cursor-not-allowed transition-all shadow-2xs"
+          title="Previous Page"
+        >
+          <ChevronLeft size={15} />
+        </button>
+        <button
+          onClick={() => onPageChange(safePage + 1)}
+          disabled={safePage >= totalPages}
+          className="inline-flex items-center justify-center p-1.5 rounded-lg border border-stone-200 bg-white text-stone-700 hover:bg-stone-100 hover:text-stone-900 disabled:opacity-35 disabled:cursor-not-allowed transition-all shadow-2xs"
+          title="Next Page"
+        >
+          <ChevronRight size={15} />
+        </button>
+      </div>
+    </div>
   );
 }

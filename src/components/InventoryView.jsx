@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Plus, Search, Pencil, Trash2, AlertTriangle, ArrowUpDown,
   Filter, Package, Check, RefreshCw, Download
@@ -7,7 +7,7 @@ import {
   fmtINR, CATEGORY_COLORS, ACCENT, DANGER, SUCCESS, genId
 } from "../data/seedData";
 import { exportToCSV } from "../utils/exportUtils";
-import { Modal, CategoryTag, Badge, SearchInput, Field } from "./UIComponents";
+import { Modal, CategoryTag, Badge, SearchInput, Field, TablePagination } from "./UIComponents";
 
 export function InventoryView({ products, onAddProduct, onUpdateProduct, onDeleteProduct, onAdjustStock }) {
   const [search, setSearch] = useState("");
@@ -15,6 +15,10 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
   const [stockFilter, setStockFilter] = useState("All"); // All, Low, Healthy
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Form state
   const [form, setForm] = useState({
@@ -29,6 +33,11 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
     stock: "",
     reorder: "5",
   });
+
+  // Reset to page 1 on search or filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, categoryFilter, stockFilter]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -47,6 +56,13 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
       return matchSearch && matchCat && matchStock;
     });
   }, [products, search, categoryFilter, stockFilter]);
+
+  const paginatedProducts = useMemo(() => {
+    return filteredProducts.slice(
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize
+    );
+  }, [filteredProducts, currentPage, pageSize]);
 
   // Inventory Totals
   const totalItems = products.reduce((acc, p) => acc + p.stock, 0);
@@ -98,8 +114,8 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
       color: "Blue",
       sku: "GEN-NEW-" + Math.floor(100 + Math.random() * 900),
       cost: 300,
-      price: 599,
-      stock: 20,
+      price: 699,
+      stock: 15,
       reorder: 5,
     });
     setIsModalOpen(true);
@@ -122,60 +138,77 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
     setIsModalOpen(true);
   };
 
+  const handleCategoryChange = (newCat) => {
+    const defaultSub = newCat === "Gents" ? "Shirts" : newCat === "Kids" ? "Sets" : "Kurtis";
+    const prefix = newCat === "Gents" ? "GEN" : newCat === "Kids" ? "KID" : "WOM";
+    setForm({
+      ...form,
+      category: newCat,
+      subcategory: defaultSub,
+      sku: `${prefix}-NEW-${Math.floor(100 + Math.random() * 900)}`,
+    });
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.name || !form.price) return;
+    if (!form.name || !form.price || !form.cost) return;
 
-    const productData = {
+    const prodData = {
       name: form.name,
       category: form.category,
-      subcategory: form.subcategory || "General",
+      subcategory: form.subcategory,
       size: form.size,
       color: form.color,
-      sku: form.sku || `${form.category.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`,
-      cost: Number(form.cost) || 0,
-      price: Number(form.price) || 0,
-      stock: Number(form.stock) || 0,
-      reorder: Number(form.reorder) || 5,
+      sku: form.sku || "SKU-" + Date.now(),
+      cost: Number(form.cost),
+      price: Number(form.price),
+      stock: Number(form.stock),
+      reorder: Number(form.reorder),
     };
 
     if (editingProduct) {
-      onUpdateProduct({ ...editingProduct, ...productData });
+      onUpdateProduct({ ...editingProduct, ...prodData });
     } else {
-      onAddProduct({ id: "p_" + Date.now(), ...productData });
+      onAddProduct({ id: "prod_" + Date.now(), ...prodData });
     }
     setIsModalOpen(false);
   };
 
   return (
     <div className="space-y-5">
-      {/* Top Metrics Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
-        <div className="border-r border-stone-100 last:border-0 pr-2">
-          <div className="text-xs font-semibold text-stone-400 uppercase">Total SKUs</div>
-          <div className="text-xl font-bold text-stone-900 mt-1">{products.length}</div>
-        </div>
-        <div className="border-r border-stone-100 last:border-0 pr-2">
-          <div className="text-xs font-semibold text-stone-400 uppercase">Total Garments</div>
-          <div className="text-xl font-bold text-stone-900 mt-1">{totalItems} units</div>
-        </div>
-        <div className="border-r border-stone-100 last:border-0 pr-2">
-          <div className="text-xs font-semibold text-stone-400 uppercase">Inventory Cost</div>
-          <div className="text-xl font-bold text-stone-900 mt-1">{fmtINR(totalCost)}</div>
+      {/* Top Banner Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
+        <div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Total Garments Stock</div>
+          <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1">{totalItems} Pcs</div>
+          <div className="text-xs text-stone-400 mt-0.5">{products.length} distinct styles</div>
         </div>
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Retail Valuation</div>
-          <div className="text-xl font-bold text-emerald-700 mt-1">{fmtINR(totalRetail)}</div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Stock Valuation (Cost)</div>
+          <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1">{fmtINR(totalCost)}</div>
+          <div className="text-xs text-emerald-600 mt-0.5">Procurement asset</div>
+        </div>
+        <div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Retail Potential (MRP)</div>
+          <div className="text-xl sm:text-2xl font-bold text-emerald-700 mt-1">{fmtINR(totalRetail)}</div>
+          <div className="text-xs text-stone-400 mt-0.5">Estimated gross revenue</div>
+        </div>
+        <div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Low Stock Alerts</div>
+          <div className={`text-xl sm:text-2xl font-bold mt-1 ${lowStockCount > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+            {lowStockCount} Items
+          </div>
+          <div className="text-xs text-stone-400 mt-0.5">Below reorder threshold</div>
         </div>
       </div>
 
-      {/* Action Bar & Filters */}
+      {/* Filter and Action Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
         <div className="flex flex-wrap items-center gap-2">
           <SearchInput
             value={search}
             onChange={setSearch}
-            placeholder="Search by SKU, Name, Color..."
+            placeholder="Search SKU, name, color..."
           />
 
           {/* Category Filter Pills */}
@@ -199,18 +232,18 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
           <select
             value={stockFilter}
             onChange={(e) => setStockFilter(e.target.value)}
-            className="text-xs font-semibold bg-stone-100 border-none rounded-xl px-3 py-2 text-stone-700 focus:ring-2 focus:ring-amber-800/20"
+            className="text-xs font-semibold bg-stone-100 hover:bg-stone-200 border-none rounded-xl px-3 py-2 text-stone-700 cursor-pointer focus:ring-0 outline-none"
           >
             <option value="All">All Stock Levels</option>
-            <option value="Low">Low Stock ({lowStockCount})</option>
-            <option value="Healthy">Healthy Stock</option>
+            <option value="Low">⚠️ Low Stock (≤ Reorder)</option>
+            <option value="Healthy">✅ Healthy Stock</option>
           </select>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportCSV}
-            title="Download inventory list as CSV spreadsheet"
+            title="Download inventory report as CSV"
             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-all border border-stone-200 flex-shrink-0"
           >
             <Download size={15} /> Export CSV
@@ -232,10 +265,10 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
             <thead className="bg-stone-50 text-stone-600 text-xs font-bold uppercase tracking-wider border-b border-stone-200">
               <tr>
                 <th className="px-4 py-3.5">Product & SKU</th>
-                <th className="px-4 py-3.5">Category</th>
-                <th className="px-4 py-3.5">Size / Color</th>
-                <th className="px-4 py-3.5 text-right">Cost</th>
-                <th className="px-4 py-3.5 text-right">Price</th>
+                <th className="px-4 py-3.5">Department</th>
+                <th className="px-4 py-3.5">Size & Color</th>
+                <th className="px-4 py-3.5 text-right">Unit Cost</th>
+                <th className="px-4 py-3.5 text-right">Selling Price</th>
                 <th className="px-4 py-3.5 text-center">Stock Level</th>
                 <th className="px-4 py-3.5 text-center">Status</th>
                 <th className="px-4 py-3.5 text-right">Actions</th>
@@ -245,11 +278,11 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
               {filteredProducts.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-stone-400">
-                    No matching products found.
+                    No garment products found matching your filters.
                   </td>
                 </tr>
               ) : (
-                filteredProducts.map((p) => {
+                paginatedProducts.map((p) => {
                   const isLow = p.stock <= p.reorder;
                   const isOutOfStock = p.stock === 0;
                   const margin = Math.round(((p.price - p.cost) / p.price) * 100);
@@ -331,6 +364,16 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
             </tbody>
           </table>
         </div>
+
+        {/* Table Pagination Toolbar */}
+        <TablePagination
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalItems={filteredProducts.length}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[10, 30, 50, 100]}
+        />
       </div>
 
       {/* Add/Edit Product Modal */}
@@ -348,110 +391,125 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
                 required
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Slim Fit Linen Shirt"
+                placeholder="e.g. Linen Slim Fit Shirt"
                 className="input-field"
               />
             </Field>
 
-            <Field label="Category" required>
+            <Field label="Category / Division" required>
               <select
                 value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                onChange={(e) => handleCategoryChange(e.target.value)}
                 className="input-field"
               >
-                <option value="Gents">Gents</option>
-                <option value="Kids">Kids</option>
-                <option value="Women">Women</option>
+                <option value="Gents">Gents (Men's Apparel)</option>
+                <option value="Kids">Kids (Children's Apparel)</option>
+                <option value="Women">Women (Ladies' Apparel)</option>
               </select>
             </Field>
 
-            <Field label="Subcategory">
+            <Field label="Subcategory / Style">
               <input
                 type="text"
                 value={form.subcategory}
                 onChange={(e) => setForm({ ...form, subcategory: e.target.value })}
-                placeholder="e.g. Shirts, Sarees, T-Shirts"
+                placeholder="e.g. Formal Shirts, Kurtis, Frocks"
                 className="input-field"
               />
             </Field>
 
-            <Field label="SKU Code">
+            <Field label="SKU Code" required>
               <input
                 type="text"
+                required
                 value={form.sku}
                 onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                placeholder="e.g. GEN-SH-102"
                 className="input-field font-mono"
               />
             </Field>
 
-            <Field label="Size">
-              <input
-                type="text"
-                value={form.size}
-                onChange={(e) => setForm({ ...form, size: e.target.value })}
-                placeholder="e.g. M, L, XL, 32, Free"
-                className="input-field"
-              />
-            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Size">
+                <select
+                  value={form.size}
+                  onChange={(e) => setForm({ ...form, size: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="XS">XS</option>
+                  <option value="S">S</option>
+                  <option value="M">M</option>
+                  <option value="L">L</option>
+                  <option value="XL">XL</option>
+                  <option value="XXL">XXL</option>
+                  <option value="Free">Free Size</option>
+                  <option value="2-3Y">2-3 Yrs</option>
+                  <option value="4-5Y">4-5 Yrs</option>
+                  <option value="6-7Y">6-7 Yrs</option>
+                  <option value="8-9Y">8-9 Yrs</option>
+                </select>
+              </Field>
 
-            <Field label="Color">
-              <input
-                type="text"
-                value={form.color}
-                onChange={(e) => setForm({ ...form, color: e.target.value })}
-                placeholder="e.g. Maroon, Teal, White"
-                className="input-field"
-              />
-            </Field>
+              <Field label="Color">
+                <input
+                  type="text"
+                  value={form.color}
+                  onChange={(e) => setForm({ ...form, color: e.target.value })}
+                  placeholder="e.g. Navy Blue"
+                  className="input-field"
+                />
+              </Field>
+            </div>
 
-            <Field label="Cost Price (₹)">
-              <input
-                type="number"
-                min="0"
-                value={form.cost}
-                onChange={(e) => setForm({ ...form, cost: e.target.value })}
-                placeholder="e.g. 450"
-                className="input-field font-mono"
-              />
-            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Cost Price (₹)" required>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={form.cost}
+                  onChange={(e) => setForm({ ...form, cost: e.target.value })}
+                  className="input-field font-mono"
+                />
+              </Field>
 
-            <Field label="Selling Price (₹)" required>
-              <input
-                type="number"
-                min="0"
-                required
-                value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
-                placeholder="e.g. 899"
-                className="input-field font-mono"
-              />
-            </Field>
+              <Field label="Selling Price (₹)" required>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  className="input-field font-mono"
+                />
+              </Field>
+            </div>
 
-            <Field label="Initial Stock Quantity">
-              <input
-                type="number"
-                min="0"
-                value={form.stock}
-                onChange={(e) => setForm({ ...form, stock: e.target.value })}
-                placeholder="e.g. 25"
-                className="input-field font-mono"
-              />
-            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Opening Stock (Pcs)" required>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={form.stock}
+                  onChange={(e) => setForm({ ...form, stock: e.target.value })}
+                  className="input-field font-mono"
+                />
+              </Field>
 
-            <Field label="Reorder Alert Threshold">
-              <input
-                type="number"
-                min="1"
-                value={form.reorder}
-                onChange={(e) => setForm({ ...form, reorder: e.target.value })}
-                placeholder="e.g. 5"
-                className="input-field font-mono"
-              />
-            </Field>
+              <Field label="Reorder Threshold" required>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={form.reorder}
+                  onChange={(e) => setForm({ ...form, reorder: e.target.value })}
+                  className="input-field font-mono"
+                />
+              </Field>
+            </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-stone-100">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
@@ -463,7 +521,7 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
               type="submit"
               className="px-5 py-2.5 text-xs font-bold text-white bg-amber-800 hover:bg-amber-900 rounded-xl shadow-xs"
             >
-              {editingProduct ? "Save Changes" : "Create Product"}
+              {editingProduct ? "Update Product" : "Save Product"}
             </button>
           </div>
         </form>

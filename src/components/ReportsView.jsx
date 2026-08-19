@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import {
   TrendingUp, IndianRupee, PieChart as PieIcon, BarChart3,
   Award, ArrowUpRight, CheckCircle, Percent, Download
@@ -11,9 +11,13 @@ import {
   fmtINR, CATEGORY_COLORS, ACCENT, saleTotal
 } from "../data/seedData";
 import { exportToCSV } from "../utils/exportUtils";
-import { StatCard, CategoryTag } from "./UIComponents";
+import { StatCard, CategoryTag, TablePagination } from "./UIComponents";
 
 export function ReportsView({ sales, products, customers }) {
+  // Pagination state for leaderboard
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   // Financial metrics calculation
   const financialSummary = useMemo(() => {
     let totalRevenue = 0;
@@ -42,7 +46,7 @@ export function ReportsView({ sales, products, customers }) {
     };
   }, [sales, products]);
 
-  // Top Selling Products Leaderboard
+  // Top Selling Products Leaderboard (All products sorted by revenue)
   const topSelling = useMemo(() => {
     const map = {};
     sales.forEach((s) => {
@@ -69,9 +73,15 @@ export function ReportsView({ sales, products, customers }) {
         };
       })
       .filter((x) => x.product)
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 8);
+      .sort((a, b) => b.revenue - a.revenue);
   }, [sales, products]);
+
+  const paginatedTopSelling = useMemo(() => {
+    return topSelling.slice(
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize
+    );
+  }, [topSelling, currentPage, pageSize]);
 
   // Category analytics
   const categoryAnalytics = useMemo(() => {
@@ -218,9 +228,9 @@ export function ReportsView({ sales, products, customers }) {
         </div>
       </div>
 
-      {/* Top Selling Products Leaderboard */}
-      <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+      {/* Top Selling Products Leaderboard Table */}
+      <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
+        <div className="p-5 pb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-stone-100">
           <div>
             <h3 className="font-serif font-bold text-stone-900 text-base">
               Top Selling Garments (Leaderboard)
@@ -251,35 +261,48 @@ export function ReportsView({ sales, products, customers }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {topSelling.map((item, idx) => (
-                <tr key={item.product.id} className="hover:bg-stone-50/60">
-                  <td className="px-4 py-3 font-bold text-stone-400 font-mono text-xs">
-                    #{idx + 1}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-semibold text-stone-900">{item.product.name}</div>
-                    <div className="text-xs text-stone-400 font-mono">{item.product.sku}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <CategoryTag category={item.product.category} />
-                  </td>
-                  <td className="px-4 py-3 text-center font-bold text-stone-800">
-                    {item.qty} pcs
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-stone-600 text-xs">
-                    {fmtINR(item.product.price)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-bold text-stone-900 font-mono">
-                    {fmtINR(item.revenue)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-bold text-emerald-700 font-mono">
-                    +{fmtINR(item.profit)}
-                  </td>
-                </tr>
-              ))}
+              {paginatedTopSelling.map((item, idx) => {
+                const rank = (currentPage - 1) * pageSize + idx + 1;
+                return (
+                  <tr key={item.product.id} className="hover:bg-stone-50/60 transition-colors">
+                    <td className="px-4 py-3 font-bold text-stone-400 font-mono text-xs">
+                      #{rank}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-stone-900">{item.product.name}</div>
+                      <div className="text-xs text-stone-400 font-mono">{item.product.sku}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <CategoryTag category={item.product.category} />
+                    </td>
+                    <td className="px-4 py-3 text-center font-bold text-stone-800">
+                      {item.qty} pcs
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-stone-600 text-xs">
+                      {fmtINR(item.product.price)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-stone-900 font-mono">
+                      {fmtINR(item.revenue)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-emerald-700 font-mono">
+                      +{fmtINR(item.profit)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+
+        {/* Table Pagination Toolbar */}
+        <TablePagination
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalItems={topSelling.length}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[10, 30, 50, 100]}
+        />
       </div>
     </div>
   );

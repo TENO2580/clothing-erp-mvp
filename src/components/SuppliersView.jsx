@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Plus, Search, Store, Phone, Mail, MapPin, Truck,
   Pencil, Trash2, IndianRupee, Download, Table as TableIcon, LayoutGrid
@@ -7,7 +7,7 @@ import {
   fmtINR, fmtDate, purchaseTotal
 } from "../data/seedData";
 import { exportToCSV } from "../utils/exportUtils";
-import { Modal, Badge, SearchInput, Field } from "./UIComponents";
+import { Modal, Badge, SearchInput, Field, TablePagination } from "./UIComponents";
 
 export function SuppliersView({ suppliers, purchases, products, onAddSupplier, onUpdateSupplier, onDeleteSupplier }) {
   const [search, setSearch] = useState("");
@@ -15,6 +15,10 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [selectedHistorySupplier, setSelectedHistorySupplier] = useState(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const [form, setForm] = useState({
     name: "",
@@ -24,6 +28,11 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
     location: "Tirupur",
   });
 
+  // Reset to page 1 on search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
   const filteredSuppliers = suppliers.filter((s) => {
     return (
       s.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -32,6 +41,11 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
       s.phone.includes(search)
     );
   });
+
+  const paginatedSuppliers = filteredSuppliers.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   // Calculate supplier purchase statistics
   const supplierStats = suppliers.map((sup) => {
@@ -211,7 +225,7 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
                     </td>
                   </tr>
                 ) : (
-                  filteredSuppliers.map((s) => {
+                  paginatedSuppliers.map((s) => {
                     const stats = supplierStats.find((st) => st.id === s.id) || { ordersCount: 0, totalVolume: 0 };
 
                     return (
@@ -295,100 +309,123 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
               </tbody>
             </table>
           </div>
+
+          {/* Table Pagination Toolbar */}
+          <TablePagination
+            currentPage={currentPage}
+            pageSize={pageSize}
+            totalItems={filteredSuppliers.length}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[10, 30, 50, 100]}
+          />
         </div>
       ) : (
         /* CARDS GRID VIEW */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredSuppliers.length === 0 ? (
-            <div className="col-span-full py-12 text-center text-stone-400 bg-white rounded-2xl border border-stone-200">
-              No suppliers found matching your query.
-            </div>
-          ) : (
-            filteredSuppliers.map((s) => {
-              const stats = supplierStats.find((st) => st.id === s.id) || { ordersCount: 0, totalVolume: 0 };
+        <div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredSuppliers.length === 0 ? (
+              <div className="col-span-full py-12 text-center text-stone-400 bg-white rounded-2xl border border-stone-200">
+                No suppliers found matching your query.
+              </div>
+            ) : (
+              paginatedSuppliers.map((s) => {
+                const stats = supplierStats.find((st) => st.id === s.id) || { ordersCount: 0, totalVolume: 0 };
 
-              return (
-                <div
-                  key={s.id}
-                  className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all"
-                >
-                  <div>
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-800 font-bold flex items-center justify-center text-sm font-serif border border-stone-200">
-                          <Store size={18} />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-stone-900 text-base">{s.name}</h4>
-                          <div className="text-xs text-stone-400 flex items-center gap-1">
-                            <MapPin size={11} /> {s.location}
+                return (
+                  <div
+                    key={s.id}
+                    className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-800 font-bold flex items-center justify-center text-sm font-serif border border-stone-200">
+                            <Store size={18} />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-stone-900 text-base">{s.name}</h4>
+                            <div className="text-xs text-stone-400 flex items-center gap-1">
+                              <MapPin size={11} /> {s.location}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleOpenEdit(s)}
-                          className="p-1 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100"
-                          title="Edit Supplier"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => onDeleteSupplier(s.id)}
-                          className="p-1 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
-                          title="Delete Supplier"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mb-3">
-                      <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-stone-100 text-stone-700">
-                        Category: {s.category}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1 text-xs text-stone-600 mb-4 bg-stone-50 p-2.5 rounded-xl">
-                      <div className="flex items-center gap-2">
-                        <Phone size={12} className="text-stone-400" />
-                        <span className="font-mono">{s.phone}</span>
-                      </div>
-                      {s.email && (
-                        <div className="flex items-center gap-2 truncate">
-                          <Mail size={12} className="text-stone-400 flex-shrink-0" />
-                          <span className="truncate">{s.email}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleOpenEdit(s)}
+                            className="p-1 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100"
+                            title="Edit Supplier"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => onDeleteSupplier(s.id)}
+                            className="p-1 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
+                            title="Delete Supplier"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="border-t border-stone-100 pt-3">
-                    <div className="flex items-center justify-between text-xs mb-3">
-                      <div>
-                        <span className="text-stone-400">Total POs: </span>
-                        <span className="font-bold text-stone-800">{stats.ordersCount}</span>
                       </div>
-                      <div>
-                        <span className="text-stone-400">Total Procured: </span>
-                        <span className="font-bold text-stone-900 font-mono">
-                          {fmtINR(stats.totalVolume)}
+
+                      <div className="mb-3">
+                        <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-stone-100 text-stone-700">
+                          Category: {s.category}
                         </span>
                       </div>
+
+                      <div className="space-y-1 text-xs text-stone-600 mb-4 bg-stone-50 p-2.5 rounded-xl">
+                        <div className="flex items-center gap-2">
+                          <Phone size={12} className="text-stone-400" />
+                          <span className="font-mono">{s.phone}</span>
+                        </div>
+                        {s.email && (
+                          <div className="flex items-center gap-2 truncate">
+                            <Mail size={12} className="text-stone-400 flex-shrink-0" />
+                            <span className="truncate">{s.email}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    <button
-                      onClick={() => setSelectedHistorySupplier(s)}
-                      className="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1"
-                    >
-                      <Truck size={13} /> View PO Orders ({stats.ordersCount})
-                    </button>
+                    <div className="border-t border-stone-100 pt-3">
+                      <div className="flex items-center justify-between text-xs mb-3">
+                        <div>
+                          <span className="text-stone-400">Total POs: </span>
+                          <span className="font-bold text-stone-800">{stats.ordersCount}</span>
+                        </div>
+                        <div>
+                          <span className="text-stone-400">Total Procured: </span>
+                          <span className="font-bold text-stone-900 font-mono">
+                            {fmtINR(stats.totalVolume)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => setSelectedHistorySupplier(s)}
+                        className="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1"
+                      >
+                        <Truck size={13} /> View PO Orders ({stats.ordersCount})
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </div>
+
+          <div className="mt-4 bg-white rounded-2xl border border-stone-200 overflow-hidden">
+            <TablePagination
+              currentPage={currentPage}
+              pageSize={pageSize}
+              totalItems={filteredSuppliers.length}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={[10, 30, 50, 100]}
+            />
+          </div>
         </div>
       )}
 
