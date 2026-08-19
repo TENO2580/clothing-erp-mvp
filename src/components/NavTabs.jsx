@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  LayoutDashboard, Shirt, ShoppingCart, Truck, Users, Store, BarChart3, ReceiptText
+  LayoutDashboard, Shirt, ShoppingCart, Truck, Users, Store, BarChart3, FileSpreadsheet
 } from "lucide-react";
 import { ACCENT } from "../data/seedData";
 
@@ -8,10 +8,11 @@ export const NAV_CONFIG = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "inventory", label: "Inventory", icon: Shirt, badgeKey: "products" },
   { key: "sales", label: "Sales & POS", icon: ShoppingCart, badgeKey: "sales" },
+  { key: "sales-report", label: "Sales Report", icon: FileSpreadsheet },
   { key: "purchases", label: "Purchases", icon: Truck, badgeKey: "purchases" },
   { key: "customers", label: "Customers", icon: Users, badgeKey: "customers" },
   { key: "suppliers", label: "Suppliers", icon: Store, badgeKey: "suppliers" },
-  { key: "reports", label: "Sales Report", icon: ReceiptText },
+  { key: "reports", label: "Analytics", icon: BarChart3 },
 ];
 
 export function NavTabs({ active, onChange, counts = {} }) {
@@ -27,7 +28,7 @@ export function NavTabs({ active, onChange, counts = {} }) {
             <button
               key={item.key}
               onClick={() => onChange(item.key)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold border-b-2 whitespace-nowrap transition-all ${
+              className={`flex items-center gap-2 px-3.5 sm:px-4 py-3 text-sm font-semibold border-b-2 whitespace-nowrap transition-all ${
                 isActive
                   ? "border-amber-800 text-amber-900 bg-amber-50/50"
                   : "border-transparent text-stone-500 hover:text-stone-800 hover:border-stone-300"

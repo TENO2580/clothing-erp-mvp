@@ -4,6 +4,7 @@ import { NavTabs } from "./components/NavTabs";
 import { DashboardView } from "./components/DashboardView";
 import { InventoryView } from "./components/InventoryView";
 import { SalesView } from "./components/SalesView";
+import { DetailedSalesReportView } from "./components/DetailedSalesReportView";
 import { PurchasesView } from "./components/PurchasesView";
 import { CustomersView } from "./components/CustomersView";
 import { SuppliersView } from "./components/SuppliersView";
@@ -30,7 +31,7 @@ export default function App() {
     try {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get("tab");
-      if (tabParam && ["dashboard", "inventory", "sales", "purchases", "customers", "suppliers", "reports"].includes(tabParam)) {
+      if (tabParam && ["dashboard", "inventory", "sales", "sales-report", "purchases", "customers", "suppliers", "reports"].includes(tabParam)) {
         return tabParam;
       }
     } catch (e) {}
@@ -332,6 +333,14 @@ export default function App() {
             customers={customers}
             onAddSale={handleAddSale}
             onNavigate={setActiveTab}
+          />
+        )}
+
+        {activeTab === "sales-report" && (
+          <DetailedSalesReportView
+            sales={sales}
+            products={products}
+            customers={customers}
           />
         )}
 

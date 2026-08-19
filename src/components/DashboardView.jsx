@@ -132,7 +132,7 @@ export function DashboardView({ products, sales, customers, suppliers, purchases
               <p className="text-xs text-stone-400">Past 30 days performance across segments</p>
             </div>
             <button 
-              onClick={() => onNavigate("reports")} 
+              onClick={() => onNavigate("sales-report")} 
               className="text-xs text-amber-800 font-semibold flex items-center gap-1 hover:underline"
             >
               Full Report <ArrowRight size={13} />
@@ -208,7 +208,7 @@ export function DashboardView({ products, sales, customers, suppliers, purchases
             </div>
             <div className="flex items-center gap-2">
               <button 
-                onClick={() => onNavigate("reports")} 
+                onClick={() => onNavigate("sales-report")} 
                 className="text-xs text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 border border-amber-200"
               >
                 📊 Full Sales Report

@@ -183,7 +183,7 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onNavigate && onNavigate("reports")}
+            onClick={() => onNavigate && onNavigate("sales-report")}
             title="View detailed Sales & POS Report"
             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-all border border-amber-200 flex-shrink-0"
           >
