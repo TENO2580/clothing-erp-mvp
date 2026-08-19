@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   Plus, Search, Store, Phone, Mail, MapPin, Truck,
-  Pencil, Trash2, PackageCheck, Download
+  Pencil, Trash2, IndianRupee, Download, Table as TableIcon, LayoutGrid
 } from "lucide-react";
 import {
   fmtINR, fmtDate, purchaseTotal
@@ -11,16 +11,17 @@ import { Modal, Badge, SearchInput, Field } from "./UIComponents";
 
 export function SuppliersView({ suppliers, purchases, products, onAddSupplier, onUpdateSupplier, onDeleteSupplier }) {
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState("table"); // "table" (default) or "cards"
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [selectedHistorySupplier, setSelectedHistorySupplier] = useState(null);
 
   const [form, setForm] = useState({
     name: "",
-    category: "Gents & Kids",
-    location: "Kochi",
+    category: "Gents, Kids",
     phone: "",
     email: "",
+    location: "Tirupur",
   });
 
   const filteredSuppliers = suppliers.filter((s) => {
@@ -32,29 +33,29 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
     );
   });
 
-  // Calculate metrics per supplier
-  const supplierStats = suppliers.map((s) => {
-    const sPurchases = purchases.filter((p) => p.supplierId === s.id);
-    const totalVolume = sPurchases.reduce((sum, p) => sum + purchaseTotal(p), 0);
+  // Calculate supplier purchase statistics
+  const supplierStats = suppliers.map((sup) => {
+    const supPOs = purchases.filter((po) => po.supplierId === sup.id);
+    const totalVolume = supPOs.reduce((sum, po) => sum + purchaseTotal(po), 0);
     return {
-      ...s,
-      ordersCount: sPurchases.length,
+      ...sup,
+      ordersCount: supPOs.length,
       totalVolume,
     };
   });
 
-  const totalProcuredOverall = purchases.reduce((sum, p) => sum + purchaseTotal(p), 0);
+  const totalProcurementVolume = purchases.reduce((sum, po) => sum + purchaseTotal(po), 0);
 
   const handleExportCSV = () => {
     const headers = [
       "Supplier ID",
-      "Vendor Name",
+      "Supplier Name",
       "Supplied Categories",
       "Location",
       "Phone",
       "Email",
-      "Total Orders Placed",
-      "Total Procured Volume (INR)",
+      "Total POs",
+      "Total Procurement Volume (INR)",
     ];
 
     const rows = filteredSuppliers.map((s) => {
@@ -78,10 +79,10 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
     setEditingSupplier(null);
     setForm({
       name: "",
-      category: "Gents",
-      location: "Kochi",
+      category: "Gents, Kids",
       phone: "",
       email: "",
+      location: "Tirupur",
     });
     setIsModalOpen(true);
   };
@@ -91,9 +92,9 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
     setForm({
       name: s.name,
       category: s.category,
-      location: s.location,
       phone: s.phone,
       email: s.email || "",
+      location: s.location || "",
     });
     setIsModalOpen(true);
   };
@@ -105,40 +106,68 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
     if (editingSupplier) {
       onUpdateSupplier({ ...editingSupplier, ...form });
     } else {
-      onAddSupplier({ id: "s_" + Date.now(), ...form });
+      onAddSupplier({ id: "sup_" + Date.now(), ...form });
     }
     setIsModalOpen(false);
   };
 
-  const activeSupplierPurchases = selectedHistorySupplier
-    ? purchases.filter((p) => p.supplierId === selectedHistorySupplier.id)
+  const activeSupplierPOs = selectedHistorySupplier
+    ? purchases.filter((po) => po.supplierId === selectedHistorySupplier.id)
     : [];
 
   return (
     <div className="space-y-5">
-      {/* Top Banner Stats */}
+      {/* Top Banner */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Registered Vendors</div>
-          <div className="text-2xl font-bold text-stone-900 mt-1">{suppliers.length} Partners</div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Vendor Network</div>
+          <div className="text-2xl font-bold text-stone-900 mt-1">{suppliers.length} Suppliers</div>
         </div>
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Total Supply Value</div>
-          <div className="text-2xl font-bold text-stone-900 mt-1">{fmtINR(totalProcuredOverall)}</div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Total Sourcing Volume</div>
+          <div className="text-2xl font-bold text-stone-900 mt-1">{fmtINR(totalProcurementVolume)}</div>
         </div>
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Active Purchase Orders</div>
-          <div className="text-2xl font-bold text-amber-800 mt-1">{purchases.length} POs Placed</div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Active Hubs</div>
+          <div className="text-2xl font-bold text-amber-800 mt-1">Tirupur, Surat, Jaipur</div>
         </div>
       </div>
 
       {/* Action Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Search by vendor name, category, or city..."
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search by vendor name, category, or city..."
+          />
+
+          {/* View Mode Switcher (Table / Cards) */}
+          <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl">
+            <button
+              onClick={() => setViewMode("table")}
+              className={`flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                viewMode === "table"
+                  ? "bg-white text-stone-900 shadow-xs"
+                  : "text-stone-500 hover:text-stone-800"
+              }`}
+              title="Table View"
+            >
+              <TableIcon size={14} /> Table
+            </button>
+            <button
+              onClick={() => setViewMode("cards")}
+              className={`flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                viewMode === "cards"
+                  ? "bg-white text-stone-900 shadow-xs"
+                  : "text-stone-500 hover:text-stone-800"
+              }`}
+              title="Cards Grid View"
+            >
+              <LayoutGrid size={14} /> Cards
+            </button>
+          </div>
+        </div>
 
         <div className="flex items-center gap-2">
           <button
@@ -158,156 +187,274 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
         </div>
       </div>
 
-      {/* Suppliers Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredSuppliers.length === 0 ? (
-          <div className="col-span-full py-12 text-center text-stone-400 bg-white rounded-2xl border border-stone-200">
-            No suppliers found matching your query.
-          </div>
-        ) : (
-          filteredSuppliers.map((s) => {
-            const stats = supplierStats.find((st) => st.id === s.id) || { ordersCount: 0, totalVolume: 0 };
+      {/* TABLE DATA FORMAT VIEW (Default) */}
+      {viewMode === "table" ? (
+        <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-stone-50 text-stone-600 text-xs font-bold uppercase tracking-wider border-b border-stone-200">
+                <tr>
+                  <th className="px-4 py-3.5">Vendor Profile</th>
+                  <th className="px-4 py-3.5">Categories Supplied</th>
+                  <th className="px-4 py-3.5">Manufacturing Hub</th>
+                  <th className="px-4 py-3.5">Contact Phone</th>
+                  <th className="px-4 py-3.5 text-center">Purchase Orders</th>
+                  <th className="px-4 py-3.5 text-right">Total Procurement</th>
+                  <th className="px-4 py-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {filteredSuppliers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-stone-400">
+                      No suppliers found matching your query.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredSuppliers.map((s) => {
+                    const stats = supplierStats.find((st) => st.id === s.id) || { ordersCount: 0, totalVolume: 0 };
 
-            return (
-              <div
-                key={s.id}
-                className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all"
-              >
-                <div>
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-800 font-bold flex items-center justify-center text-sm font-serif border border-stone-200">
-                        <Store size={18} />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-stone-900 text-base">{s.name}</h4>
-                        <div className="text-xs text-stone-400 flex items-center gap-1">
-                          <MapPin size={11} /> {s.location}
+                    return (
+                      <tr key={s.id} className="hover:bg-stone-50/70 transition-colors">
+                        {/* Vendor Name */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-stone-100 text-stone-800 font-bold flex items-center justify-center text-xs border border-stone-200 flex-shrink-0">
+                              <Store size={15} />
+                            </div>
+                            <div>
+                              <div className="font-semibold text-stone-900">{s.name}</div>
+                              <div className="text-[11px] text-stone-400 font-mono">{s.id}</div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Categories */}
+                        <td className="px-4 py-3">
+                          <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-stone-100 text-stone-700">
+                            {s.category}
+                          </span>
+                        </td>
+
+                        {/* Location */}
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1 text-xs text-stone-600 font-medium bg-stone-50 px-2 py-0.5 rounded-md border border-stone-100">
+                            <MapPin size={11} className="text-stone-400" />
+                            {s.location}
+                          </span>
+                        </td>
+
+                        {/* Phone */}
+                        <td className="px-4 py-3 text-stone-700 font-mono text-xs">
+                          {s.phone}
+                        </td>
+
+                        {/* POs */}
+                        <td className="px-4 py-3 text-center">
+                          <Badge variant={stats.ordersCount > 0 ? "info" : "default"}>
+                            {stats.ordersCount} PO{stats.ordersCount === 1 ? "" : "s"}
+                          </Badge>
+                        </td>
+
+                        {/* Total Procured */}
+                        <td className="px-4 py-3 text-right font-bold text-stone-900 font-mono">
+                          {fmtINR(stats.totalVolume)}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setSelectedHistorySupplier(s)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-stone-100 text-stone-800 hover:bg-stone-200 transition-colors border border-stone-200"
+                              title="View Purchase Orders"
+                            >
+                              <Truck size={13} />
+                              <span className="hidden xl:inline">POs</span>
+                            </button>
+                            <button
+                              onClick={() => handleOpenEdit(s)}
+                              className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
+                              title="Edit Supplier"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              onClick={() => onDeleteSupplier(s.id)}
+                              className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              title="Delete Supplier"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* CARDS GRID VIEW */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredSuppliers.length === 0 ? (
+            <div className="col-span-full py-12 text-center text-stone-400 bg-white rounded-2xl border border-stone-200">
+              No suppliers found matching your query.
+            </div>
+          ) : (
+            filteredSuppliers.map((s) => {
+              const stats = supplierStats.find((st) => st.id === s.id) || { ordersCount: 0, totalVolume: 0 };
+
+              return (
+                <div
+                  key={s.id}
+                  className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all"
+                >
+                  <div>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-800 font-bold flex items-center justify-center text-sm font-serif border border-stone-200">
+                          <Store size={18} />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-stone-900 text-base">{s.name}</h4>
+                          <div className="text-xs text-stone-400 flex items-center gap-1">
+                            <MapPin size={11} /> {s.location}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenEdit(s)}
-                        className="p-1 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100"
-                        title="Edit Supplier"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={() => onDeleteSupplier(s.id)}
-                        className="p-1 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
-                        title="Delete Supplier"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mb-3">
-                    <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-stone-100 text-stone-700">
-                      Category: {s.category}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1 text-xs text-stone-600 mb-4 bg-stone-50 p-2.5 rounded-xl">
-                    <div className="flex items-center gap-2">
-                      <Phone size={12} className="text-stone-400" />
-                      <span className="font-mono">{s.phone}</span>
-                    </div>
-                    {s.email && (
-                      <div className="flex items-center gap-2 truncate">
-                        <Mail size={12} className="text-stone-400 flex-shrink-0" />
-                        <span className="truncate">{s.email}</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleOpenEdit(s)}
+                          className="p-1 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100"
+                          title="Edit Supplier"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => onDeleteSupplier(s.id)}
+                          className="p-1 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
+                          title="Delete Supplier"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="border-t border-stone-100 pt-3">
-                  <div className="flex items-center justify-between text-xs mb-3">
-                    <div>
-                      <span className="text-stone-400">Total POs: </span>
-                      <span className="font-bold text-stone-800">{stats.ordersCount}</span>
                     </div>
-                    <div>
-                      <span className="text-stone-400">Total Procured: </span>
-                      <span className="font-bold text-stone-900 font-mono">
-                        {fmtINR(stats.totalVolume)}
+
+                    <div className="mb-3">
+                      <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-stone-100 text-stone-700">
+                        Category: {s.category}
                       </span>
                     </div>
+
+                    <div className="space-y-1 text-xs text-stone-600 mb-4 bg-stone-50 p-2.5 rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <Phone size={12} className="text-stone-400" />
+                        <span className="font-mono">{s.phone}</span>
+                      </div>
+                      {s.email && (
+                        <div className="flex items-center gap-2 truncate">
+                          <Mail size={12} className="text-stone-400 flex-shrink-0" />
+                          <span className="truncate">{s.email}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <button
-                    onClick={() => setSelectedHistorySupplier(s)}
-                    className="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1"
-                  >
-                    <Truck size={13} /> View PO Orders ({stats.ordersCount})
-                  </button>
+                  <div className="border-t border-stone-100 pt-3">
+                    <div className="flex items-center justify-between text-xs mb-3">
+                      <div>
+                        <span className="text-stone-400">Total POs: </span>
+                        <span className="font-bold text-stone-800">{stats.ordersCount}</span>
+                      </div>
+                      <div>
+                        <span className="text-stone-400">Total Procured: </span>
+                        <span className="font-bold text-stone-900 font-mono">
+                          {fmtINR(stats.totalVolume)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => setSelectedHistorySupplier(s)}
+                      className="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1"
+                    >
+                      <Truck size={13} /> View PO Orders ({stats.ordersCount})
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {/* Add / Edit Supplier Modal */}
       <Modal
         open={isModalOpen}
-        title={editingSupplier ? "Edit Supplier Details" : "Register New Vendor"}
+        title={editingSupplier ? "Edit Supplier Details" : "Register New Supplier"}
         onClose={() => setIsModalOpen(false)}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Field label="Supplier / Company Name" required>
+          <Field label="Supplier / Mill Name" required>
             <input
               type="text"
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. Malabar Textile Mills"
+              placeholder="e.g. Tirupur Knit Fabrics Ltd"
               className="input-field"
             />
           </Field>
 
-          <Field label="Garment Categories Supplied">
-            <input
-              type="text"
+          <Field label="Supplied Garment Categories" required>
+            <select
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
-              placeholder="e.g. Gents & Kids, Sarees, Denim"
               className="input-field"
-            />
+            >
+              <option value="Gents">Gents Only</option>
+              <option value="Kids">Kids Only</option>
+              <option value="Women">Women Only</option>
+              <option value="Gents, Kids">Gents, Kids</option>
+              <option value="Kids, Women">Kids, Women</option>
+              <option value="Gents, Women">Gents, Women</option>
+              <option value="Gents, Kids, Women">All Categories (Multi-Specialist)</option>
+            </select>
           </Field>
 
-          <Field label="City / Location" required>
-            <input
-              type="text"
-              required
-              value={form.location}
-              onChange={(e) => setForm({ ...form, location: e.target.value })}
-              placeholder="e.g. Coimbatore, Kochi"
-              className="input-field"
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Phone Number" required>
+              <input
+                type="tel"
+                required
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="e.g. 9842100001"
+                className="input-field font-mono"
+              />
+            </Field>
 
-          <Field label="Contact Phone" required>
-            <input
-              type="tel"
-              required
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              placeholder="e.g. 9847012345"
-              className="input-field font-mono"
-            />
-          </Field>
+            <Field label="Manufacturing City / Hub">
+              <input
+                type="text"
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                placeholder="e.g. Tirupur"
+                className="input-field"
+              />
+            </Field>
+          </div>
 
           <Field label="Email Address">
             <input
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="e.g. sales@vendor.com"
+              placeholder="e.g. sales@mill.com"
               className="input-field"
             />
           </Field>
@@ -324,7 +471,7 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
               type="submit"
               className="px-5 py-2.5 text-xs font-bold text-white bg-amber-800 hover:bg-amber-900 rounded-xl shadow-xs"
             >
-              {editingSupplier ? "Save Changes" : "Register Vendor"}
+              {editingSupplier ? "Save Changes" : "Register Supplier"}
             </button>
           </div>
         </form>
@@ -333,7 +480,7 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
       {/* Supplier PO History Modal */}
       <Modal
         open={Boolean(selectedHistorySupplier)}
-        title={`Purchase Orders — ${selectedHistorySupplier?.name || ""}`}
+        title={`Procurement POs — ${selectedHistorySupplier?.name || ""}`}
         onClose={() => setSelectedHistorySupplier(null)}
         wide
       >
@@ -341,38 +488,36 @@ export function SuppliersView({ suppliers, purchases, products, onAddSupplier, o
           <div className="space-y-4">
             <div className="bg-stone-50 p-3 rounded-xl border border-stone-200 flex items-center justify-between text-xs">
               <div>
-                <span className="text-stone-500">Location: </span>
-                <span className="font-bold text-stone-800">{selectedHistorySupplier.location}</span>
+                <span className="text-stone-500">Contact: </span>
+                <span className="font-bold text-stone-800">{selectedHistorySupplier.phone}</span>
               </div>
               <div>
                 <span className="text-stone-500">Total POs: </span>
-                <span className="font-bold text-stone-800">{activeSupplierPurchases.length}</span>
+                <span className="font-bold text-stone-800">{activeSupplierPOs.length}</span>
               </div>
               <div>
-                <span className="text-stone-500">Total Billed: </span>
+                <span className="text-stone-500">Total Procurement: </span>
                 <span className="font-bold text-stone-900 font-mono">
-                  {fmtINR(activeSupplierPurchases.reduce((acc, p) => acc + purchaseTotal(p), 0))}
+                  {fmtINR(activeSupplierPOs.reduce((acc, po) => acc + purchaseTotal(po), 0))}
                 </span>
               </div>
             </div>
 
-            {activeSupplierPurchases.length === 0 ? (
+            {activeSupplierPOs.length === 0 ? (
               <div className="py-8 text-center text-stone-400 text-sm">
-                No purchase orders recorded for this supplier.
+                No purchase orders raised for this supplier yet.
               </div>
             ) : (
               <div className="divide-y divide-stone-100 max-h-96 overflow-y-auto">
-                {activeSupplierPurchases.map((po) => (
+                {activeSupplierPOs.map((po) => (
                   <div key={po.id} className="py-3 flex items-center justify-between">
                     <div>
-                      <div className="font-mono font-bold text-amber-900 text-sm">{po.id}</div>
-                      <div className="text-xs text-stone-400">
-                        {fmtDate(po.date)} · Status: {po.status}
-                      </div>
+                      <div className="font-mono font-bold text-stone-900 text-sm">{po.id}</div>
+                      <div className="text-xs text-stone-400">{fmtDate(po.date)}</div>
                       <div className="text-xs text-stone-600 mt-1">
                         {po.items.map((it) => {
                           const p = products.find((prod) => prod.id === it.productId);
-                          return p ? `${p.name} (${it.qty} pcs)` : `Garment (${it.qty} pcs)`;
+                          return p ? `${p.name} (x${it.qty})` : `Item (x${it.qty})`;
                         }).join(", ")}
                       </div>
                     </div>
