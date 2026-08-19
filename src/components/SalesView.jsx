@@ -35,10 +35,12 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
     { productId: products[0]?.id || "", qty: 1, price: products[0]?.price || 0 },
   ]);
 
+  const [datePreset, setDatePreset] = useState("All");
+
   // Reset to page 1 on search or filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, paymentFilter]);
+  }, [search, paymentFilter, datePreset]);
 
   const filteredSales = sales.filter((s) => {
     const cust = customerName(customers, s.customerId);
@@ -46,7 +48,29 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
       s.id.toLowerCase().includes(search.toLowerCase()) ||
       cust.toLowerCase().includes(search.toLowerCase());
     const matchPay = paymentFilter === "All" || s.paymentMode === paymentFilter;
-    return matchSearch && matchPay;
+
+    let matchDate = true;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const thisMonthPrefix = todayStr.slice(0, 7);
+
+    if (datePreset === "today") {
+      matchDate = s.date === todayStr;
+    } else if (datePreset === "yesterday") {
+      matchDate = s.date === yesterday;
+    } else if (datePreset === "7days") {
+      const saleDate = new Date(s.date);
+      const daysDiff = (new Date() - saleDate) / (1000 * 60 * 60 * 24);
+      matchDate = daysDiff >= 0 && daysDiff <= 7;
+    } else if (datePreset === "thismonth") {
+      matchDate = s.date.startsWith(thisMonthPrefix);
+    } else if (datePreset === "30days") {
+      const saleDate = new Date(s.date);
+      const daysDiff = (new Date() - saleDate) / (1000 * 60 * 60 * 24);
+      matchDate = daysDiff >= 0 && daysDiff <= 30;
+    }
+
+    return matchSearch && matchPay && matchDate;
   });
 
   const paginatedSales = filteredSales.slice(
@@ -209,6 +233,22 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
                 {mode}
               </button>
             ))}
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-stone-100 px-3 py-1.5 rounded-xl border border-stone-200/60">
+            <Calendar size={14} className="text-amber-800" />
+            <select
+              value={datePreset}
+              onChange={(e) => setDatePreset(e.target.value)}
+              className="text-xs font-bold bg-transparent border-none text-stone-800 cursor-pointer focus:ring-0 outline-none pr-2"
+            >
+              <option value="All">All Invoices</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="7days">Last 7 Days</option>
+              <option value="thismonth">This Month</option>
+              <option value="30days">Last 30 Days</option>
+            </select>
           </div>
         </div>
 

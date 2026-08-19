@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from "react";
 import {
   Search, Download, Calendar, User, Phone, Tag, Shirt,
   ShoppingBag, IndianRupee, Filter, ArrowUpDown, Receipt,
-  CheckCircle2, RefreshCw, FileSpreadsheet, QrCode, Banknote, CreditCard
+  CheckCircle2, RefreshCw, FileSpreadsheet, QrCode, Banknote, CreditCard,
+  X, CalendarRange
 } from "lucide-react";
 import {
   fmtINR, fmtDate, CATEGORY_COLORS, ACCENT, saleTotal
@@ -13,7 +14,9 @@ import { StatCard, CategoryTag, Badge, SearchInput, TablePagination } from "./UI
 export function DetailedSalesReportView({ sales, products, customers }) {
   const [search, setSearch] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("All"); // All, UPI, Cash, Card
-  const [dateFilter, setDateFilter] = useState("All"); // All, 7days, 30days
+  const [datePreset, setDatePreset] = useState("All"); // All, today, yesterday, 7days, thismonth, 30days, custom
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -22,16 +25,68 @@ export function DetailedSalesReportView({ sales, products, customers }) {
   // Reset to page 1 whenever filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, paymentFilter, dateFilter]);
+  }, [search, paymentFilter, datePreset, fromDate, toDate]);
 
-  // Financial metrics from Sales & POS
+  // Filtered Sales & POS list
+  const filteredSales = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const thisMonthPrefix = todayStr.slice(0, 7);
+
+    return sales.filter((s) => {
+      const cust = customers.find((c) => c.id === s.customerId);
+      const custName = cust ? cust.name : "Walk-in Customer";
+      const custPhone = cust ? cust.phone : "";
+
+      // Match item names in invoice
+      const itemNames = s.items
+        .map((it) => {
+          const p = products.find((prod) => prod.id === it.productId);
+          return p ? `${p.name} ${p.sku} ${p.category}` : "";
+        })
+        .join(" ");
+
+      const matchesSearch =
+        s.id.toLowerCase().includes(search.toLowerCase()) ||
+        custName.toLowerCase().includes(search.toLowerCase()) ||
+        custPhone.includes(search) ||
+        itemNames.toLowerCase().includes(search.toLowerCase());
+
+      const matchesPayment = paymentFilter === "All" || s.paymentMode === paymentFilter;
+
+      // Date filtering logic
+      let matchesDate = true;
+      if (datePreset === "today") {
+        matchesDate = s.date === todayStr;
+      } else if (datePreset === "yesterday") {
+        matchesDate = s.date === yesterday;
+      } else if (datePreset === "7days") {
+        const saleDate = new Date(s.date);
+        const daysDiff = (new Date() - saleDate) / (1000 * 60 * 60 * 24);
+        matchesDate = daysDiff >= 0 && daysDiff <= 7;
+      } else if (datePreset === "thismonth") {
+        matchesDate = s.date.startsWith(thisMonthPrefix);
+      } else if (datePreset === "30days") {
+        const saleDate = new Date(s.date);
+        const daysDiff = (new Date() - saleDate) / (1000 * 60 * 60 * 24);
+        matchesDate = daysDiff >= 0 && daysDiff <= 30;
+      } else if (datePreset === "custom") {
+        if (fromDate && s.date < fromDate) matchesDate = false;
+        if (toDate && s.date > toDate) matchesDate = false;
+      }
+
+      return matchesSearch && matchesPayment && matchesDate;
+    });
+  }, [sales, products, customers, search, paymentFilter, datePreset, fromDate, toDate]);
+
+  // Financial metrics from filtered Sales & POS
   const financialSummary = useMemo(() => {
     let totalRevenue = 0;
     let totalCostOfGoods = 0;
     let totalUnitsSold = 0;
     let paymentSplit = { UPI: 0, Cash: 0, Card: 0 };
 
-    sales.forEach((s) => {
+    filteredSales.forEach((s) => {
       const invTotal = saleTotal(s);
       if (paymentSplit[s.paymentMode] !== undefined) {
         paymentSplit[s.paymentMode] += invTotal;
@@ -56,46 +111,9 @@ export function DetailedSalesReportView({ sales, products, customers }) {
       grossMargin: Math.round(grossMargin),
       totalUnitsSold,
       paymentSplit,
-      avgOrderValue: sales.length > 0 ? Math.round(totalRevenue / sales.length) : 0,
+      avgOrderValue: filteredSales.length > 0 ? Math.round(totalRevenue / filteredSales.length) : 0,
     };
-  }, [sales, products]);
-
-  // Filtered Sales & POS list
-  const filteredSales = useMemo(() => {
-    return sales.filter((s) => {
-      const cust = customers.find((c) => c.id === s.customerId);
-      const custName = cust ? cust.name : "Walk-in Customer";
-      const custPhone = cust ? cust.phone : "";
-
-      // Match item names in invoice
-      const itemNames = s.items
-        .map((it) => {
-          const p = products.find((prod) => prod.id === it.productId);
-          return p ? `${p.name} ${p.sku} ${p.category}` : "";
-        })
-        .join(" ");
-
-      const matchesSearch =
-        s.id.toLowerCase().includes(search.toLowerCase()) ||
-        custName.toLowerCase().includes(search.toLowerCase()) ||
-        custPhone.includes(search) ||
-        itemNames.toLowerCase().includes(search.toLowerCase());
-
-      const matchesPayment = paymentFilter === "All" || s.paymentMode === paymentFilter;
-
-      // Date filtering
-      let matchesDate = true;
-      if (dateFilter !== "All") {
-        const saleDate = new Date(s.date);
-        const now = new Date();
-        const daysDiff = (now - saleDate) / (1000 * 60 * 60 * 24);
-        if (dateFilter === "7days") matchesDate = daysDiff <= 7;
-        if (dateFilter === "30days") matchesDate = daysDiff <= 30;
-      }
-
-      return matchesSearch && matchesPayment && matchesDate;
-    });
-  }, [sales, products, customers, search, paymentFilter, dateFilter]);
+  }, [filteredSales, products]);
 
   const paginatedSales = useMemo(() => {
     return filteredSales.slice(
@@ -103,6 +121,13 @@ export function DetailedSalesReportView({ sales, products, customers }) {
       currentPage * pageSize
     );
   }, [filteredSales, currentPage, pageSize]);
+
+  // Clear all date filters
+  const handleClearDateFilter = () => {
+    setDatePreset("All");
+    setFromDate("");
+    setToDate("");
+  };
 
   // Export Detailed Sales CSV
   const handleExportCSV = () => {
@@ -162,9 +187,9 @@ export function DetailedSalesReportView({ sales, products, customers }) {
       {/* Top Banner Financial KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Total Sales Generated</div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Filtered Sales Value</div>
           <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1">{fmtINR(financialSummary.totalRevenue)}</div>
-          <div className="text-xs text-stone-400 mt-0.5">Across {sales.length} customer bills</div>
+          <div className="text-xs text-stone-400 mt-0.5">Across {filteredSales.length} invoices</div>
         </div>
         <div>
           <div className="text-xs font-semibold text-stone-400 uppercase">Gross Profit Margin</div>
@@ -172,7 +197,7 @@ export function DetailedSalesReportView({ sales, products, customers }) {
           <div className="text-xs text-emerald-600 mt-0.5">{financialSummary.grossMargin}% Net Margin</div>
         </div>
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Total Units Dispatched</div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Total Units Sold</div>
           <div className="text-xl sm:text-2xl font-bold text-amber-900 mt-1">{financialSummary.totalUnitsSold} Pcs</div>
           <div className="text-xs text-stone-400 mt-0.5">Apparel garments billed</div>
         </div>
@@ -181,7 +206,7 @@ export function DetailedSalesReportView({ sales, products, customers }) {
           <div className="text-xl sm:text-2xl font-bold text-stone-800 mt-1">
             {fmtINR(financialSummary.avgOrderValue)}
           </div>
-          <div className="text-xs text-stone-400 mt-0.5">Per retail transaction</div>
+          <div className="text-xs text-stone-400 mt-0.5">Per retail invoice</div>
         </div>
       </div>
 
@@ -234,50 +259,109 @@ export function DetailedSalesReportView({ sales, products, customers }) {
       </div>
 
       {/* Filter and Action Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
-        <div className="flex flex-wrap items-center gap-2 flex-1">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Search invoice, client, phone, garment..."
-          />
+      <div className="space-y-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2 flex-1">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search invoice, client, phone, garment..."
+            />
 
-          {/* Payment Filter */}
-          <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl">
-            {["All", "UPI", "Cash", "Card"].map((pm) => (
-              <button
-                key={pm}
-                onClick={() => setPaymentFilter(pm)}
-                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-                  paymentFilter === pm
-                    ? "bg-white text-stone-900 shadow-xs font-bold"
-                    : "text-stone-500 hover:text-stone-800"
-                }`}
+            {/* Payment Filter */}
+            <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl">
+              {["All", "UPI", "Cash", "Card"].map((pm) => (
+                <button
+                  key={pm}
+                  onClick={() => setPaymentFilter(pm)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+                    paymentFilter === pm
+                      ? "bg-white text-stone-900 shadow-xs font-bold"
+                      : "text-stone-500 hover:text-stone-800"
+                  }`}
+                >
+                  {pm}
+                </button>
+              ))}
+            </div>
+
+            {/* Date Preset Filter Dropdown */}
+            <div className="flex items-center gap-1.5 bg-stone-100 px-3 py-1.5 rounded-xl border border-stone-200/60">
+              <Calendar size={14} className="text-amber-800" />
+              <select
+                value={datePreset}
+                onChange={(e) => setDatePreset(e.target.value)}
+                className="text-xs font-bold bg-transparent border-none text-stone-800 cursor-pointer focus:ring-0 outline-none pr-2"
               >
-                {pm}
+                <option value="All">All Invoices (All Time)</option>
+                <option value="today">Today</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="7days">Last 7 Days</option>
+                <option value="thismonth">This Month</option>
+                <option value="30days">Last 30 Days</option>
+                <option value="custom">Custom Date Range 📅</option>
+              </select>
+            </div>
+
+            {/* Clear Date Filter Button if active */}
+            {datePreset !== "All" && (
+              <button
+                onClick={handleClearDateFilter}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-semibold transition-all"
+                title="Clear date filter"
+              >
+                <X size={12} /> Clear Date
               </button>
-            ))}
+            )}
           </div>
 
-          {/* Date Filter */}
-          <select
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="text-xs font-semibold bg-stone-100 hover:bg-stone-200 border-none rounded-xl px-3 py-2 text-stone-700 cursor-pointer focus:ring-0 outline-none"
+          <button
+            onClick={handleExportCSV}
+            title="Download detailed itemized sales report as CSV"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
           >
-            <option value="All">All Invoices</option>
-            <option value="7days">Last 7 Days</option>
-            <option value="30days">Last 30 Days</option>
-          </select>
+            <Download size={15} /> Export Detailed Sales CSV
+          </button>
         </div>
 
-        <button
-          onClick={handleExportCSV}
-          title="Download detailed itemized sales report as CSV"
-          className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
-        >
-          <Download size={15} /> Export Detailed Sales CSV
-        </button>
+        {/* Custom Date Range Pickers (Visible when 'custom' is selected) */}
+        {datePreset === "custom" && (
+          <div className="pt-3 border-t border-stone-100 flex flex-wrap items-center gap-3 animate-in fade-in duration-200 bg-amber-50/40 p-3 rounded-xl border border-amber-100">
+            <div className="flex items-center gap-2">
+              <CalendarRange size={15} className="text-amber-800" />
+              <span className="text-xs font-bold text-amber-900">Custom Date Range:</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-stone-500 font-semibold">From:</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="input-field text-xs py-1.5 px-2.5 w-36 font-mono bg-white"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-stone-500 font-semibold">To:</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="input-field text-xs py-1.5 px-2.5 w-36 font-mono bg-white"
+              />
+            </div>
+
+            {(fromDate || toDate) && (
+              <button
+                onClick={() => { setFromDate(""); setToDate(""); }}
+                className="text-xs text-amber-900 hover:underline font-semibold"
+              >
+                Reset Range
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ITEMIZED SALES & POS REPORT TABLE */}
@@ -299,7 +383,7 @@ export function DetailedSalesReportView({ sales, products, customers }) {
               {filteredSales.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-stone-400">
-                    No sales transactions match your search filters.
+                    No sales transactions match your date & search filters.
                   </td>
                 </tr>
               ) : (
