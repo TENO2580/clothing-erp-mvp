@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Plus, Search, ShoppingCart, Receipt, Printer, User,
-  CheckCircle2, AlertCircle, Trash2, Calendar, Download
+  CheckCircle2, AlertCircle, Trash2, Calendar, Download, BarChart3
 } from "lucide-react";
 import {
   fmtINR, fmtDate, saleTotal, customerName, genId
@@ -9,7 +9,7 @@ import {
 import { exportToCSV } from "../utils/exportUtils";
 import { Modal, Badge, SearchInput, Field, TablePagination } from "./UIComponents";
 
-export function SalesView({ sales, products, customers, onAddSale }) {
+export function SalesView({ sales, products, customers, onAddSale, onNavigate }) {
   const [search, setSearch] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("All");
   const [isNewSaleOpen, setIsNewSaleOpen] = useState(false);
@@ -182,6 +182,14 @@ export function SalesView({ sales, products, customers, onAddSale }) {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => onNavigate && onNavigate("reports")}
+            title="View detailed Sales & POS Report"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-all border border-amber-200 flex-shrink-0"
+          >
+            <BarChart3 size={15} /> View Sales Report
+          </button>
+
           <button
             onClick={handleExportCSV}
             title="Download sales invoices as CSV"

@@ -331,6 +331,7 @@ export default function App() {
             products={products}
             customers={customers}
             onAddSale={handleAddSale}
+            onNavigate={setActiveTab}
           />
         )}
 

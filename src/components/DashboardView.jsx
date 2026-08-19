@@ -206,12 +206,20 @@ export function DashboardView({ products, sales, customers, suppliers, purchases
               <h3 className="font-serif font-bold text-stone-900 text-base">Recent Sales</h3>
               <p className="text-xs text-stone-400">Latest customer transactions</p>
             </div>
-            <button 
-              onClick={() => onNavigate("sales")} 
-              className="text-xs text-amber-800 font-semibold flex items-center gap-1 hover:underline"
-            >
-              View All <ArrowRight size={13} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => onNavigate("reports")} 
+                className="text-xs text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 border border-amber-200"
+              >
+                📊 Full Sales Report
+              </button>
+              <button 
+                onClick={() => onNavigate("sales")} 
+                className="text-xs text-stone-500 font-semibold flex items-center gap-1 hover:underline"
+              >
+                POS Counter <ArrowRight size={13} />
+              </button>
+            </div>
           </div>
 
           <div className="divide-y divide-stone-100">
