@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Plus, Search, Pencil, Trash2, AlertTriangle, ArrowUpDown,
-  Filter, Package, Check, RefreshCw, Download
+  Filter, Package, Check, RefreshCw, Download, Calendar,
+  Clock, History, ShieldAlert
 } from "lucide-react";
 import {
-  fmtINR, CATEGORY_COLORS, ACCENT, DANGER, SUCCESS, genId
+  fmtINR, fmtDate, calcAgeingDays, CATEGORY_COLORS, ACCENT, DANGER, SUCCESS, genId
 } from "../data/seedData";
 import { exportToCSV } from "../utils/exportUtils";
 import { Modal, CategoryTag, Badge, SearchInput, Field, TablePagination } from "./UIComponents";
@@ -12,7 +13,8 @@ import { Modal, CategoryTag, Badge, SearchInput, Field, TablePagination } from "
 export function InventoryView({ products, onAddProduct, onUpdateProduct, onDeleteProduct, onAdjustStock }) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
-  const [stockFilter, setStockFilter] = useState("All"); // All, Low, Healthy
+  const [stockFilter, setStockFilter] = useState("All"); // All, Low, Out, Healthy
+  const [ageingFilter, setAgeingFilter] = useState("All"); // All, fresh30, mid60, slow90
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
 
@@ -32,30 +34,39 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
     price: "",
     stock: "",
     reorder: "5",
+    addedDate: new Date().toISOString().slice(0, 10),
   });
 
   // Reset to page 1 on search or filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, categoryFilter, stockFilter]);
+  }, [search, categoryFilter, stockFilter, ageingFilter]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
       const matchSearch =
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         p.sku.toLowerCase().includes(search.toLowerCase()) ||
-        p.subcategory.toLowerCase().includes(search.toLowerCase()) ||
-        p.color.toLowerCase().includes(search.toLowerCase());
+        (p.subcategory && p.subcategory.toLowerCase().includes(search.toLowerCase())) ||
+        (p.color && p.color.toLowerCase().includes(search.toLowerCase()));
       
       const matchCat = categoryFilter === "All" || p.category === categoryFilter;
+      
       const matchStock =
         stockFilter === "All" ||
-        (stockFilter === "Low" && p.stock <= p.reorder) ||
+        (stockFilter === "Low" && p.stock <= p.reorder && p.stock > 0) ||
+        (stockFilter === "Out" && p.stock === 0) ||
         (stockFilter === "Healthy" && p.stock > p.reorder);
 
-      return matchSearch && matchCat && matchStock;
+      const ageingDays = calcAgeingDays(p.addedDate);
+      let matchAgeing = true;
+      if (ageingFilter === "fresh30") matchAgeing = ageingDays <= 30;
+      if (ageingFilter === "mid60") matchAgeing = ageingDays > 30 && ageingDays <= 60;
+      if (ageingFilter === "slow90") matchAgeing = ageingDays > 60;
+
+      return matchSearch && matchCat && matchStock && matchAgeing;
     });
-  }, [products, search, categoryFilter, stockFilter]);
+  }, [products, search, categoryFilter, stockFilter, ageingFilter]);
 
   const paginatedProducts = useMemo(() => {
     return filteredProducts.slice(
@@ -68,40 +79,56 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
   const totalItems = products.reduce((acc, p) => acc + p.stock, 0);
   const totalCost = products.reduce((acc, p) => acc + p.stock * p.cost, 0);
   const totalRetail = products.reduce((acc, p) => acc + p.stock * p.price, 0);
-  const lowStockCount = products.filter((p) => p.stock <= p.reorder).length;
+  const lowStockCount = products.filter((p) => p.stock <= p.reorder && p.stock > 0).length;
+  const outOfStockCount = products.filter((p) => p.stock === 0).length;
+
+  // Average Ageing calculation
+  const avgAgeingDays = useMemo(() => {
+    if (products.length === 0) return 0;
+    const totalDays = products.reduce((sum, p) => sum + calcAgeingDays(p.addedDate), 0);
+    return Math.round(totalDays / products.length);
+  }, [products]);
 
   const handleExportCSV = () => {
     const headers = [
       "SKU",
       "Product Name",
-      "Category",
+      "Department / Category",
       "Subcategory",
       "Size",
       "Color",
-      "Cost Price (INR)",
+      "Unit Cost (INR)",
       "Selling Price (INR)",
-      "Stock Qty",
-      "Reorder Level",
+      "Stock Quantity",
+      "Stock Added Date",
+      "Ageing (Days)",
+      "Stock Status",
       "Total Cost Value (INR)",
       "Total Retail Value (INR)",
     ];
 
-    const rows = filteredProducts.map((p) => [
-      p.sku,
-      p.name,
-      p.category,
-      p.subcategory,
-      p.size,
-      p.color,
-      p.cost,
-      p.price,
-      p.stock,
-      p.reorder,
-      p.stock * p.cost,
-      p.stock * p.price,
-    ]);
+    const rows = filteredProducts.map((p) => {
+      const ageing = calcAgeingDays(p.addedDate);
+      const statusStr = p.stock === 0 ? "Out of Stock" : p.stock <= p.reorder ? "Low Stock" : "In Stock";
+      return [
+        p.sku,
+        p.name,
+        p.category,
+        p.subcategory || "N/A",
+        p.size,
+        p.color,
+        p.cost,
+        p.price,
+        p.stock,
+        p.addedDate || "N/A",
+        `${ageing} days`,
+        statusStr,
+        p.stock * p.cost,
+        p.stock * p.price,
+      ];
+    });
 
-    exportToCSV(`vastra_inventory_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+    exportToCSV(`vastra_inventory_ageing_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
   };
 
   const handleOpenAdd = () => {
@@ -110,13 +137,14 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
       name: "",
       category: "Gents",
       subcategory: "Shirts",
-      size: "L",
-      color: "Blue",
-      sku: "GEN-NEW-" + Math.floor(100 + Math.random() * 900),
-      cost: 300,
-      price: 699,
-      stock: 15,
-      reorder: 5,
+      size: "M",
+      color: "White",
+      sku: "GEN-NEW-" + String(products.length + 1).padStart(3, "0"),
+      cost: "",
+      price: "",
+      stock: "20",
+      reorder: "5",
+      addedDate: new Date().toISOString().slice(0, 10),
     });
     setIsModalOpen(true);
   };
@@ -126,92 +154,122 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
     setForm({
       name: p.name,
       category: p.category,
-      subcategory: p.subcategory,
+      subcategory: p.subcategory || "",
       size: p.size,
       color: p.color,
       sku: p.sku,
-      cost: p.cost,
-      price: p.price,
-      stock: p.stock,
-      reorder: p.reorder,
+      cost: String(p.cost),
+      price: String(p.price),
+      stock: String(p.stock),
+      reorder: String(p.reorder),
+      addedDate: p.addedDate || new Date().toISOString().slice(0, 10),
     });
     setIsModalOpen(true);
   };
 
-  const handleCategoryChange = (newCat) => {
-    const defaultSub = newCat === "Gents" ? "Shirts" : newCat === "Kids" ? "Sets" : "Kurtis";
-    const prefix = newCat === "Gents" ? "GEN" : newCat === "Kids" ? "KID" : "WOM";
-    setForm({
-      ...form,
-      category: newCat,
-      subcategory: defaultSub,
-      sku: `${prefix}-NEW-${Math.floor(100 + Math.random() * 900)}`,
-    });
-  };
-
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.name || !form.price || !form.cost) return;
-
-    const prodData = {
+    const productPayload = {
       name: form.name,
       category: form.category,
       subcategory: form.subcategory,
       size: form.size,
       color: form.color,
-      sku: form.sku || "SKU-" + Date.now(),
+      sku: form.sku,
       cost: Number(form.cost),
       price: Number(form.price),
       stock: Number(form.stock),
       reorder: Number(form.reorder),
+      addedDate: form.addedDate || new Date().toISOString().slice(0, 10),
     };
 
     if (editingProduct) {
-      onUpdateProduct({ ...editingProduct, ...prodData });
+      onUpdateProduct({
+        ...editingProduct,
+        ...productPayload,
+      });
     } else {
-      onAddProduct({ id: "prod_" + Date.now(), ...prodData });
+      const newId = "p" + (products.length + 1);
+      onAddProduct({
+        id: newId,
+        ...productPayload,
+      });
     }
     setIsModalOpen(false);
   };
 
+  // Helper for Ageing Badge styling
+  const renderAgeingBadge = (addedDate) => {
+    const days = calcAgeingDays(addedDate);
+    if (!addedDate) return <span className="text-stone-400 text-xs">—</span>;
+
+    if (days <= 30) {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200">
+          <Clock size={11} /> {days}d (Fresh)
+        </span>
+      );
+    } else if (days <= 60) {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+          <Clock size={11} /> {days}d (Normal)
+        </span>
+      );
+    } else if (days <= 90) {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-orange-50 text-orange-800 border border-orange-200">
+          <Clock size={11} /> {days}d (Moderate)
+        </span>
+      );
+    } else {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-800 border border-rose-200">
+          <AlertTriangle size={11} /> {days}d (Slow Moving)
+        </span>
+      );
+    }
+  };
+
   return (
     <div className="space-y-5">
-      {/* Top Banner Stats */}
+      {/* Top Banner KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Total Garments Stock</div>
-          <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1">{totalItems} Pcs</div>
-          <div className="text-xs text-stone-400 mt-0.5">{products.length} distinct styles</div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Total Inventory Value</div>
+          <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1">{fmtINR(totalRetail)}</div>
+          <div className="text-xs text-stone-400 mt-0.5">Cost value: {fmtINR(totalCost)}</div>
         </div>
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Stock Valuation (Cost)</div>
-          <div className="text-xl sm:text-2xl font-bold text-stone-900 mt-1">{fmtINR(totalCost)}</div>
-          <div className="text-xs text-emerald-600 mt-0.5">Procurement asset</div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Total Garments Stocked</div>
+          <div className="text-xl sm:text-2xl font-bold text-amber-900 mt-1">{totalItems} Pcs</div>
+          <div className="text-xs text-stone-400 mt-0.5">Across {products.length} SKU styles</div>
         </div>
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Retail Potential (MRP)</div>
-          <div className="text-xl sm:text-2xl font-bold text-emerald-700 mt-1">{fmtINR(totalRetail)}</div>
-          <div className="text-xs text-stone-400 mt-0.5">Estimated gross revenue</div>
+          <div className="text-xs font-semibold text-stone-400 uppercase">Average Stock Ageing</div>
+          <div className="text-xl sm:text-2xl font-bold text-stone-800 mt-1">~{avgAgeingDays} Days</div>
+          <div className="text-xs text-emerald-600 mt-0.5">Healthy turnover velocity</div>
         </div>
         <div>
-          <div className="text-xs font-semibold text-stone-400 uppercase">Low Stock Alerts</div>
-          <div className={`text-xl sm:text-2xl font-bold mt-1 ${lowStockCount > 0 ? "text-amber-700" : "text-emerald-700"}`}>
-            {lowStockCount} Items
+          <div className="text-xs font-semibold text-stone-400 uppercase">Stock Alerts</div>
+          <div className="text-xl sm:text-2xl font-bold text-rose-600 mt-1">
+            {lowStockCount + outOfStockCount} Items
           </div>
-          <div className="text-xs text-stone-400 mt-0.5">Below reorder threshold</div>
+          <div className="text-xs text-stone-400 mt-0.5">
+            {outOfStockCount} out of stock · {lowStockCount} low stock
+          </div>
         </div>
       </div>
 
       {/* Filter and Action Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 flex-1">
           <SearchInput
             value={search}
             onChange={setSearch}
-            placeholder="Search SKU, name, color..."
+            placeholder="Search by garment name, SKU, color..."
           />
 
-          {/* Category Filter Pills */}
+          {/* Department Category Filter */}
           <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl">
             {["All", "Gents", "Kids", "Women"].map((cat) => (
               <button
@@ -219,7 +277,7 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
                 onClick={() => setCategoryFilter(cat)}
                 className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
                   categoryFilter === cat
-                    ? "bg-white text-stone-900 shadow-xs"
+                    ? "bg-white text-stone-900 shadow-xs font-bold"
                     : "text-stone-500 hover:text-stone-800"
                 }`}
               >
@@ -228,22 +286,35 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
             ))}
           </div>
 
-          {/* Stock Health Filter */}
+          {/* Stock Level Filter */}
           <select
             value={stockFilter}
             onChange={(e) => setStockFilter(e.target.value)}
             className="text-xs font-semibold bg-stone-100 hover:bg-stone-200 border-none rounded-xl px-3 py-2 text-stone-700 cursor-pointer focus:ring-0 outline-none"
           >
             <option value="All">All Stock Levels</option>
-            <option value="Low">⚠️ Low Stock (≤ Reorder)</option>
-            <option value="Healthy">✅ Healthy Stock</option>
+            <option value="Healthy">Healthy Stock</option>
+            <option value="Low">Low Stock Warning</option>
+            <option value="Out">Out of Stock (0)</option>
+          </select>
+
+          {/* Ageing Filter */}
+          <select
+            value={ageingFilter}
+            onChange={(e) => setAgeingFilter(e.target.value)}
+            className="text-xs font-semibold bg-stone-100 hover:bg-stone-200 border-none rounded-xl px-3 py-2 text-stone-700 cursor-pointer focus:ring-0 outline-none"
+          >
+            <option value="All">All Ageing</option>
+            <option value="fresh30">Fresh Stock (&lt; 30 Days)</option>
+            <option value="mid60">Normal Ageing (30–60 Days)</option>
+            <option value="slow90">Slow Moving (&gt; 60 Days)</option>
           </select>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportCSV}
-            title="Download inventory report as CSV"
+            title="Download inventory report with ageing as CSV"
             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-all border border-stone-200 flex-shrink-0"
           >
             <Download size={15} /> Export CSV
@@ -258,7 +329,7 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
         </div>
       </div>
 
-      {/* Inventory Table */}
+      {/* Inventory Table with Stock Added Date & Ageing */}
       <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -267,6 +338,8 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
                 <th className="px-4 py-3.5">Product & SKU</th>
                 <th className="px-4 py-3.5">Department</th>
                 <th className="px-4 py-3.5">Size & Color</th>
+                <th className="px-4 py-3.5">Stock Added Date</th>
+                <th className="px-4 py-3.5 text-center">Ageing (Days)</th>
                 <th className="px-4 py-3.5 text-right">Unit Cost</th>
                 <th className="px-4 py-3.5 text-right">Selling Price</th>
                 <th className="px-4 py-3.5 text-center">Stock Level</th>
@@ -277,39 +350,64 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
             <tbody className="divide-y divide-stone-100">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-stone-400">
+                  <td colSpan={10} className="py-12 text-center text-stone-400">
                     No garment products found matching your filters.
                   </td>
                 </tr>
               ) : (
                 paginatedProducts.map((p) => {
-                  const isLow = p.stock <= p.reorder;
+                  const isLow = p.stock <= p.reorder && p.stock > 0;
                   const isOutOfStock = p.stock === 0;
                   const margin = Math.round(((p.price - p.cost) / p.price) * 100);
 
                   return (
                     <tr key={p.id} className="hover:bg-stone-50/70 transition-colors">
+                      {/* Product & SKU */}
                       <td className="px-4 py-3">
                         <div className="font-semibold text-stone-900">{p.name}</div>
                         <div className="text-xs text-stone-400 font-mono">{p.sku}</div>
                       </td>
+
+                      {/* Department */}
                       <td className="px-4 py-3">
                         <CategoryTag category={p.category} />
                         <div className="text-xs text-stone-400 mt-0.5">{p.subcategory}</div>
                       </td>
-                      <td className="px-4 py-3">
+
+                      {/* Size & Color */}
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className="inline-block bg-stone-100 text-stone-700 text-xs px-2 py-0.5 rounded font-medium mr-1.5">
                           {p.size}
                         </span>
                         <span className="text-xs text-stone-500 font-medium">{p.color}</span>
                       </td>
+
+                      {/* Stock Added Date */}
+                      <td className="px-4 py-3 text-stone-600 text-xs whitespace-nowrap">
+                        <div className="flex items-center gap-1 font-medium text-stone-800">
+                          <Calendar size={12} className="text-stone-400" />
+                          {fmtDate(p.addedDate)}
+                        </div>
+                        <div className="text-[10px] text-stone-400 font-mono">{p.addedDate}</div>
+                      </td>
+
+                      {/* Ageing Date / Days in Stock */}
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        {renderAgeingBadge(p.addedDate)}
+                      </td>
+
+                      {/* Unit Cost */}
                       <td className="px-4 py-3 text-right text-stone-600 font-mono text-xs">
                         {fmtINR(p.cost)}
                       </td>
+
+                      {/* Selling Price */}
                       <td className="px-4 py-3 text-right font-bold text-stone-900 font-mono">
                         {fmtINR(p.price)}
                         <div className="text-[10px] text-emerald-600 font-semibold font-sans">{margin}% margin</div>
                       </td>
+
+                      {/* Stock Level Adjustment */}
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
                           <button
@@ -319,7 +417,7 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
                           >
                             -
                           </button>
-                          <span className={`w-8 text-center font-bold text-sm ${isLow ? "text-rose-600" : "text-stone-800"}`}>
+                          <span className={`w-8 text-center font-bold font-mono ${isOutOfStock ? "text-rose-600" : isLow ? "text-amber-700" : "text-stone-900"}`}>
                             {p.stock}
                           </span>
                           <button
@@ -330,15 +428,21 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
                           </button>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-center">
+
+                      {/* Status */}
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
                         {isOutOfStock ? (
-                          <Badge variant="danger">Out of Stock</Badge>
+                          <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                            Out of Stock
+                          </span>
                         ) : isLow ? (
-                          <Badge variant="warning">Low ({p.reorder} min)</Badge>
+                          <Badge variant="warning">Low Stock</Badge>
                         ) : (
                           <Badge variant="success">In Stock</Badge>
                         )}
                       </td>
+
+                      {/* Actions */}
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
@@ -346,14 +450,14 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
                             className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
                             title="Edit Product"
                           >
-                            <Pencil size={15} />
+                            <Pencil size={14} />
                           </button>
                           <button
                             onClick={() => onDeleteProduct(p.id)}
                             className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                             title="Delete Product"
                           >
-                            <Trash2 size={15} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </td>
@@ -376,48 +480,72 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
         />
       </div>
 
-      {/* Add/Edit Product Modal */}
+      {/* Add / Edit Product Modal */}
       <Modal
         open={isModalOpen}
-        title={editingProduct ? "Edit Product" : "Add New Garment Product"}
+        title={editingProduct ? "Edit Garment Style" : "Add New Garment Product"}
         onClose={() => setIsModalOpen(false)}
         wide
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field label="Product Name" required>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Garment Product Name" required>
               <input
                 type="text"
                 required
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Linen Slim Fit Shirt"
+                placeholder="e.g. Slim Fit Cotton Shirt"
                 className="input-field"
               />
             </Field>
 
-            <Field label="Category / Division" required>
+            <Field label="Department Category" required>
               <select
                 value={form.category}
-                onChange={(e) => handleCategoryChange(e.target.value)}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
                 className="input-field"
               >
-                <option value="Gents">Gents (Men's Apparel)</option>
-                <option value="Kids">Kids (Children's Apparel)</option>
-                <option value="Women">Women (Ladies' Apparel)</option>
+                <option value="Gents">Gents</option>
+                <option value="Kids">Kids</option>
+                <option value="Women">Women</option>
               </select>
             </Field>
+          </div>
 
-            <Field label="Subcategory / Style">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Field label="Subcategory">
               <input
                 type="text"
                 value={form.subcategory}
                 onChange={(e) => setForm({ ...form, subcategory: e.target.value })}
-                placeholder="e.g. Formal Shirts, Kurtis, Frocks"
+                placeholder="e.g. Shirts, Kurtis, Trousers"
                 className="input-field"
               />
             </Field>
 
+            <Field label="Size (e.g. S, M, L, XL, 32, Free)" required>
+              <input
+                type="text"
+                required
+                value={form.size}
+                onChange={(e) => setForm({ ...form, size: e.target.value })}
+                className="input-field"
+              />
+            </Field>
+
+            <Field label="Color (e.g. White, Sky Blue, Maroon)" required>
+              <input
+                type="text"
+                required
+                value={form.color}
+                onChange={(e) => setForm({ ...form, color: e.target.value })}
+                className="input-field"
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Field label="SKU Code" required>
               <input
                 type="text"
@@ -428,85 +556,60 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Size">
-                <select
-                  value={form.size}
-                  onChange={(e) => setForm({ ...form, size: e.target.value })}
-                  className="input-field"
-                >
-                  <option value="XS">XS</option>
-                  <option value="S">S</option>
-                  <option value="M">M</option>
-                  <option value="L">L</option>
-                  <option value="XL">XL</option>
-                  <option value="XXL">XXL</option>
-                  <option value="Free">Free Size</option>
-                  <option value="2-3Y">2-3 Yrs</option>
-                  <option value="4-5Y">4-5 Yrs</option>
-                  <option value="6-7Y">6-7 Yrs</option>
-                  <option value="8-9Y">8-9 Yrs</option>
-                </select>
-              </Field>
+            <Field label="Cost Price (₹ INR)" required>
+              <input
+                type="number"
+                required
+                min="0"
+                value={form.cost}
+                onChange={(e) => setForm({ ...form, cost: e.target.value })}
+                className="input-field font-mono"
+              />
+            </Field>
 
-              <Field label="Color">
-                <input
-                  type="text"
-                  value={form.color}
-                  onChange={(e) => setForm({ ...form, color: e.target.value })}
-                  placeholder="e.g. Navy Blue"
-                  className="input-field"
-                />
-              </Field>
-            </div>
+            <Field label="Selling Price (₹ INR)" required>
+              <input
+                type="number"
+                required
+                min="0"
+                value={form.price}
+                onChange={(e) => setForm({ ...form, price: e.target.value })}
+                className="input-field font-mono"
+              />
+            </Field>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Cost Price (₹)" required>
-                <input
-                  type="number"
-                  min="0"
-                  required
-                  value={form.cost}
-                  onChange={(e) => setForm({ ...form, cost: e.target.value })}
-                  className="input-field font-mono"
-                />
-              </Field>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Field label="Initial Stock Quantity (Pcs)" required>
+              <input
+                type="number"
+                required
+                min="0"
+                value={form.stock}
+                onChange={(e) => setForm({ ...form, stock: e.target.value })}
+                className="input-field font-mono"
+              />
+            </Field>
 
-              <Field label="Selling Price (₹)" required>
-                <input
-                  type="number"
-                  min="0"
-                  required
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
-                  className="input-field font-mono"
-                />
-              </Field>
-            </div>
+            <Field label="Reorder Threshold Alert">
+              <input
+                type="number"
+                min="1"
+                value={form.reorder}
+                onChange={(e) => setForm({ ...form, reorder: e.target.value })}
+                className="input-field font-mono"
+              />
+            </Field>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Opening Stock (Pcs)" required>
-                <input
-                  type="number"
-                  min="0"
-                  required
-                  value={form.stock}
-                  onChange={(e) => setForm({ ...form, stock: e.target.value })}
-                  className="input-field font-mono"
-                />
-              </Field>
-
-              <Field label="Reorder Threshold" required>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  value={form.reorder}
-                  onChange={(e) => setForm({ ...form, reorder: e.target.value })}
-                  className="input-field font-mono"
-                />
-              </Field>
-            </div>
+            <Field label="Stock Added Date / Inward Date" required>
+              <input
+                type="date"
+                required
+                value={form.addedDate}
+                onChange={(e) => setForm({ ...form, addedDate: e.target.value })}
+                className="input-field font-mono"
+              />
+            </Field>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-stone-100">
@@ -521,7 +624,7 @@ export function InventoryView({ products, onAddProduct, onUpdateProduct, onDelet
               type="submit"
               className="px-5 py-2.5 text-xs font-bold text-white bg-amber-800 hover:bg-amber-900 rounded-xl shadow-xs"
             >
-              {editingProduct ? "Update Product" : "Save Product"}
+              {editingProduct ? "Save Changes" : "Create Product"}
             </button>
           </div>
         </form>
