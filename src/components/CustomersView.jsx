@@ -1,21 +1,28 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
-  Plus, Search, Users, Phone, Mail, MapPin, ShoppingBag,
-  Pencil, Trash2, Receipt, ArrowRight, IndianRupee, Download,
-  Table as TableIcon, LayoutGrid, Calendar
+  Users, UserPlus, Phone, Mail, MapPin, ShoppingBag,
+  IndianRupee, Search, Download, Trash2, Pencil, ExternalLink,
+  Tag, Calendar, LayoutGrid, Table as TableIcon, Shirt
 } from "lucide-react";
 import {
-  fmtINR, fmtDate, saleTotal
+  fmtINR, fmtDate, saleTotal, CATEGORY_COLORS
 } from "../data/seedData";
 import { exportToCSV } from "../utils/exportUtils";
-import { Modal, Badge, SearchInput, Field, TablePagination } from "./UIComponents";
+import { StatCard, Badge, Modal, Field, SearchInput, TablePagination, CategoryTag } from "./UIComponents";
 
-export function CustomersView({ customers, sales, products, onAddCustomer, onUpdateCustomer, onDeleteCustomer }) {
+export function CustomersView({
+  customers,
+  sales,
+  products = [],
+  onAddCustomer,
+  onUpdateCustomer,
+  onDeleteCustomer,
+}) {
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState("table"); // "table" (default) or "cards"
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [selectedHistoryCustomer, setSelectedHistoryCustomer] = useState(null);
+  const [viewMode, setViewMode] = useState("table"); // "table" or "cards"
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -34,12 +41,59 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
     setCurrentPage(1);
   }, [search]);
 
-  const filteredCustomers = customers.filter((c) => {
+  // Calculate customer metrics connected to Sales & POS
+  const customerStats = useMemo(() => {
+    return customers.map((c) => {
+      const custSales = sales.filter((s) => s.customerId === c.id);
+      const totalSpent = custSales.reduce((sum, s) => sum + saleTotal(s), 0);
+      const lastSale = [...custSales].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+
+      // Extract all unique garments purchased from POS bills
+      const purchasedGarments = [];
+      const categoryCounts = { Gents: 0, Kids: 0, Women: 0 };
+
+      custSales.forEach((s) => {
+        s.items.forEach((it) => {
+          const prod = products.find((p) => p.id === it.productId);
+          if (prod) {
+            categoryCounts[prod.category] = (categoryCounts[prod.category] || 0) + it.qty;
+            const existing = purchasedGarments.find((g) => g.productId === prod.id);
+            if (existing) {
+              existing.totalQty += it.qty;
+            } else {
+              purchasedGarments.push({
+                productId: prod.id,
+                name: prod.name,
+                category: prod.category,
+                sku: prod.sku,
+                size: prod.size,
+                color: prod.color,
+                totalQty: it.qty,
+                price: it.price,
+              });
+            }
+          }
+        });
+      });
+
+      return {
+        ...c,
+        ordersCount: custSales.length,
+        totalSpent,
+        lastActive: lastSale ? lastSale.date : null,
+        purchasedGarments,
+        categoryCounts,
+      };
+    });
+  }, [customers, sales, products]);
+
+  const filteredCustomers = customerStats.filter((c) => {
     return (
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.phone.includes(search) ||
       (c.city && c.city.toLowerCase().includes(search.toLowerCase())) ||
-      (c.email && c.email.toLowerCase().includes(search.toLowerCase()))
+      (c.email && c.email.toLowerCase().includes(search.toLowerCase())) ||
+      c.purchasedGarments.some((g) => g.name.toLowerCase().includes(search.toLowerCase()))
     );
   });
 
@@ -48,50 +102,37 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
     currentPage * pageSize
   );
 
-  // Calculate customer metrics
-  const customerStats = customers.map((c) => {
-    const custSales = sales.filter((s) => s.customerId === c.id);
-    const totalSpent = custSales.reduce((sum, s) => sum + saleTotal(s), 0);
-    const lastSale = [...custSales].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
-    return {
-      ...c,
-      ordersCount: custSales.length,
-      totalSpent,
-      lastActive: lastSale ? lastSale.date : null,
-    };
-  });
-
   const totalClientsSpent = sales.reduce((sum, s) => sum + saleTotal(s), 0);
 
   const handleExportCSV = () => {
     const headers = [
       "Customer ID",
-      "Name",
-      "Phone",
-      "Email",
-      "City",
-      "Address",
-      "Total Orders",
+      "Customer Name",
+      "Phone Number",
+      "Email Address",
+      "City / Location",
+      "Total POS Orders",
       "Lifetime Spend (INR)",
+      "Purchased Garments (From Sales & POS)",
       "Last Purchase Date",
     ];
 
     const rows = filteredCustomers.map((c) => {
-      const stats = customerStats.find((s) => s.id === c.id) || { ordersCount: 0, totalSpent: 0, lastActive: null };
+      const garmentsStr = c.purchasedGarments.map((g) => `${g.name} (x${g.totalQty})`).join("; ");
       return [
         c.id,
         c.name,
         c.phone,
         c.email || "N/A",
         c.city || "N/A",
-        c.address || "N/A",
-        stats.ordersCount,
-        stats.totalSpent,
-        stats.lastActive || "None",
+        c.ordersCount,
+        c.totalSpent,
+        garmentsStr || "No purchases yet",
+        c.lastActive || "None",
       ];
     });
 
-    exportToCSV(`vastra_customers_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+    exportToCSV(`vastra_customers_detailed_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
   };
 
   const handleOpenAdd = () => {
@@ -120,12 +161,17 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.name || !form.phone) return;
-
     if (editingCustomer) {
-      onUpdateCustomer({ ...editingCustomer, ...form });
+      onUpdateCustomer({
+        ...editingCustomer,
+        ...form,
+      });
     } else {
-      onAddCustomer({ id: "c_" + Date.now(), ...form });
+      const newCust = {
+        id: "c" + (customers.length + 1),
+        ...form,
+      };
+      onAddCustomer(newCust);
     }
     setIsModalOpen(false);
   };
@@ -136,7 +182,7 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
 
   return (
     <div className="space-y-5">
-      {/* Top Banner */}
+      {/* Top Banner Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
         <div>
           <div className="text-xs font-semibold text-stone-400 uppercase">Registered Clients</div>
@@ -154,38 +200,36 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
         </div>
       </div>
 
-      {/* Action Bar */}
+      {/* Filter and Action Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-stone-200 shadow-xs">
         <div className="flex flex-wrap items-center gap-2">
           <SearchInput
             value={search}
             onChange={setSearch}
-            placeholder="Search by client name, phone, or city..."
+            placeholder="Search by client name, phone, city, garment..."
           />
 
-          {/* View Mode Switcher (Table / Cards) */}
+          {/* View Mode Toggle */}
           <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl">
             <button
               onClick={() => setViewMode("table")}
               className={`flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
                 viewMode === "table"
-                  ? "bg-white text-stone-900 shadow-xs"
+                  ? "bg-white text-stone-900 shadow-xs font-bold"
                   : "text-stone-500 hover:text-stone-800"
               }`}
-              title="Table View"
             >
-              <TableIcon size={14} /> Table
+              <TableIcon size={13} /> Table
             </button>
             <button
               onClick={() => setViewMode("cards")}
               className={`flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
                 viewMode === "cards"
-                  ? "bg-white text-stone-900 shadow-xs"
+                  ? "bg-white text-stone-900 shadow-xs font-bold"
                   : "text-stone-500 hover:text-stone-800"
               }`}
-              title="Cards Grid View"
             >
-              <LayoutGrid size={14} /> Cards
+              <LayoutGrid size={13} /> Cards
             </button>
           </div>
         </div>
@@ -193,7 +237,7 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportCSV}
-            title="Download client directory as CSV"
+            title="Download clients list as CSV"
             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold transition-all border border-stone-200 flex-shrink-0"
           >
             <Download size={15} /> Export CSV
@@ -203,13 +247,13 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
             onClick={handleOpenAdd}
             className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
           >
-            <Plus size={16} /> Register New Client
+            <UserPlus size={16} /> Register New Client
           </button>
         </div>
       </div>
 
-      {/* TABLE DATA FORMAT VIEW (Default) */}
-      {viewMode === "table" ? (
+      {/* TABLE VIEW */}
+      {viewMode === "table" && (
         <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -217,9 +261,9 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
                 <tr>
                   <th className="px-4 py-3.5">Client Profile</th>
                   <th className="px-4 py-3.5">Phone Number</th>
-                  <th className="px-4 py-3.5">Email Address</th>
-                  <th className="px-4 py-3.5">City / Location</th>
-                  <th className="px-4 py-3.5 text-center">Orders</th>
+                  <th className="px-4 py-3.5">City / Region</th>
+                  <th className="px-4 py-3.5">Purchased Garments (Sales & POS)</th>
+                  <th className="px-4 py-3.5 text-center">POS Orders</th>
                   <th className="px-4 py-3.5 text-right">Lifetime Spend</th>
                   <th className="px-4 py-3.5 text-center">Last Active</th>
                   <th className="px-4 py-3.5 text-right">Actions</th>
@@ -229,97 +273,115 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
                 {filteredCustomers.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-stone-400">
-                      No customers found matching your search.
+                      No clients found matching your search.
                     </td>
                   </tr>
                 ) : (
-                  paginatedCustomers.map((c) => {
-                    const stats = customerStats.find((s) => s.id === c.id) || {
-                      ordersCount: 0,
-                      totalSpent: 0,
-                      lastActive: null,
-                    };
-
-                    return (
-                      <tr key={c.id} className="hover:bg-stone-50/70 transition-colors">
-                        {/* Client Profile */}
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-xs font-serif flex-shrink-0">
-                              {c.name.slice(0, 2).toUpperCase()}
-                            </div>
-                            <div>
-                              <div className="font-semibold text-stone-900">{c.name}</div>
-                              <div className="text-[11px] text-stone-400 font-mono">{c.id}</div>
-                            </div>
+                  paginatedCustomers.map((c) => (
+                    <tr key={c.id} className="hover:bg-stone-50/70 transition-colors align-top">
+                      {/* Client Profile */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-xs font-serif flex-shrink-0">
+                            {c.name.slice(0, 2).toUpperCase()}
                           </div>
-                        </td>
-
-                        {/* Phone */}
-                        <td className="px-4 py-3 text-stone-700 font-mono text-xs">
-                          {c.phone}
-                        </td>
-
-                        {/* Email */}
-                        <td className="px-4 py-3 text-stone-500 text-xs">
-                          {c.email || "—"}
-                        </td>
-
-                        {/* City */}
-                        <td className="px-4 py-3">
-                          <span className="inline-flex items-center gap-1 text-xs text-stone-600 font-medium bg-stone-100 px-2 py-0.5 rounded-md">
-                            <MapPin size={11} className="text-stone-400" />
-                            {c.city || "Kerala"}
-                          </span>
-                        </td>
-
-                        {/* Orders Count */}
-                        <td className="px-4 py-3 text-center">
-                          <Badge variant={stats.ordersCount > 0 ? "info" : "default"}>
-                            {stats.ordersCount} order{stats.ordersCount === 1 ? "" : "s"}
-                          </Badge>
-                        </td>
-
-                        {/* Lifetime Spend */}
-                        <td className="px-4 py-3 text-right font-bold text-stone-900 font-mono">
-                          {fmtINR(stats.totalSpent)}
-                        </td>
-
-                        {/* Last Active */}
-                        <td className="px-4 py-3 text-center text-stone-500 text-xs">
-                          {stats.lastActive ? fmtDate(stats.lastActive) : "—"}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => setSelectedHistoryCustomer(c)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-900 hover:bg-amber-100 transition-colors border border-amber-200"
-                              title="View Order History"
-                            >
-                              <ShoppingBag size={13} />
-                              <span className="hidden xl:inline">Orders</span>
-                            </button>
-                            <button
-                              onClick={() => handleOpenEdit(c)}
-                              className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
-                              title="Edit Client"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              onClick={() => onDeleteCustomer(c.id)}
-                              className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                              title="Delete Client"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                          <div>
+                            <div className="font-semibold text-stone-900">{c.name}</div>
+                            <div className="text-[11px] text-stone-400 font-mono">{c.id}</div>
+                            {c.email && (
+                              <div className="text-[11px] text-stone-500">{c.email}</div>
+                            )}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })
+                        </div>
+                      </td>
+
+                      {/* Phone */}
+                      <td className="px-4 py-3.5 text-stone-800 font-mono text-xs whitespace-nowrap">
+                        {c.phone}
+                      </td>
+
+                      {/* City */}
+                      <td className="px-4 py-3.5">
+                        <span className="inline-flex items-center gap-1 text-xs text-stone-600 font-medium bg-stone-100 px-2 py-0.5 rounded-md">
+                          <MapPin size={11} className="text-stone-400" />
+                          {c.city || "Kerala"}
+                        </span>
+                      </td>
+
+                      {/* Purchased Garments (From Sales & POS) */}
+                      <td className="px-4 py-3.5 max-w-xs">
+                        {c.purchasedGarments.length === 0 ? (
+                          <span className="text-xs text-stone-400 italic">No POS purchases yet</span>
+                        ) : (
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap gap-1">
+                              {c.purchasedGarments.slice(0, 2).map((g, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center gap-1 text-[11px] bg-stone-50 border border-stone-200 px-2 py-0.5 rounded-md text-stone-700 truncate max-w-[180px]"
+                                  title={`${g.name} (${g.category}) · Total Qty: ${g.totalQty}`}
+                                >
+                                  <CategoryTag category={g.category} />
+                                  <span className="truncate">{g.name}</span>
+                                  <strong className="text-amber-900">x{g.totalQty}</strong>
+                                </span>
+                              ))}
+                            </div>
+                            {c.purchasedGarments.length > 2 && (
+                              <div className="text-[11px] text-stone-400 font-semibold">
+                                +{c.purchasedGarments.length - 2} more styles
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Orders Count */}
+                      <td className="px-4 py-3.5 text-center">
+                        <Badge variant={c.ordersCount > 0 ? "info" : "default"}>
+                          {c.ordersCount} bill{c.ordersCount === 1 ? "" : "s"}
+                        </Badge>
+                      </td>
+
+                      {/* Lifetime Spend */}
+                      <td className="px-4 py-3.5 text-right font-bold text-stone-900 font-mono">
+                        {fmtINR(c.totalSpent)}
+                      </td>
+
+                      {/* Last Active */}
+                      <td className="px-4 py-3.5 text-center text-stone-500 text-xs whitespace-nowrap">
+                        {c.lastActive ? fmtDate(c.lastActive) : "—"}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setSelectedHistoryCustomer(c)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-50 text-amber-900 hover:bg-amber-100 transition-colors border border-amber-200"
+                            title="View POS Order History"
+                          >
+                            <ShoppingBag size={13} />
+                            <span>Orders</span>
+                          </button>
+                          <button
+                            onClick={() => handleOpenEdit(c)}
+                            className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
+                            title="Edit Client"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => onDeleteCustomer(c.id)}
+                            className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            title="Delete Client"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -335,101 +397,110 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
             pageSizeOptions={[10, 30, 50, 100]}
           />
         </div>
-      ) : (
-        /* CARDS GRID VIEW */
-        <div>
+      )}
+
+      {/* CARDS VIEW */}
+      {viewMode === "cards" && (
+        <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredCustomers.length === 0 ? (
               <div className="col-span-full py-12 text-center text-stone-400 bg-white rounded-2xl border border-stone-200">
-                No customers found matching your search.
+                No clients found matching your search.
               </div>
             ) : (
-              paginatedCustomers.map((c) => {
-                const stats = customerStats.find((s) => s.id === c.id) || {
-                  ordersCount: 0,
-                  totalSpent: 0,
-                  lastActive: null,
-                };
-
-                return (
-                  <div
-                    key={c.id}
-                    className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-sm font-serif">
-                            {c.name.slice(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-stone-900 text-base">{c.name}</h4>
-                            <div className="text-xs text-stone-400 flex items-center gap-1">
-                              <MapPin size={11} /> {c.city || "Kerala"}
-                            </div>
-                          </div>
+              paginatedCustomers.map((c) => (
+                <div
+                  key={c.id}
+                  className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs flex flex-col justify-between hover:border-amber-700/40 transition-colors"
+                >
+                  <div>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-900 font-bold flex items-center justify-center text-sm font-serif">
+                          {c.name.slice(0, 2).toUpperCase()}
                         </div>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => handleOpenEdit(c)}
-                            className="p-1 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100"
-                            title="Edit Details"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => onDeleteCustomer(c.id)}
-                            className="p-1 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-rose-50"
-                            title="Delete Client"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                        <div>
+                          <h3 className="font-semibold text-stone-900 text-base">{c.name}</h3>
+                          <span className="text-xs text-stone-400 font-mono">{c.id}</span>
                         </div>
                       </div>
 
-                      <div className="space-y-1 text-xs text-stone-600 mb-4 bg-stone-50 p-2.5 rounded-xl">
+                      <Badge variant={c.ordersCount > 0 ? "info" : "default"}>
+                        {c.ordersCount} POS orders
+                      </Badge>
+                    </div>
+
+                    <div className="mt-4 space-y-2 text-xs text-stone-600">
+                      <div className="flex items-center gap-2">
+                        <Phone size={13} className="text-stone-400" />
+                        <span className="font-mono">{c.phone}</span>
+                      </div>
+                      {c.email && (
                         <div className="flex items-center gap-2">
-                          <Phone size={12} className="text-stone-400" />
-                          <span className="font-mono">{c.phone}</span>
+                          <Mail size={13} className="text-stone-400" />
+                          <span>{c.email}</span>
                         </div>
-                        {c.email && (
-                          <div className="flex items-center gap-2 truncate">
-                            <Mail size={12} className="text-stone-400 flex-shrink-0" />
-                            <span className="truncate">{c.email}</span>
-                          </div>
-                        )}
+                      )}
+                      <div className="flex items-center gap-2">
+                        <MapPin size={13} className="text-stone-400" />
+                        <span>{c.city || "Kerala"} {c.address ? `· ${c.address}` : ""}</span>
                       </div>
                     </div>
 
-                    <div className="border-t border-stone-100 pt-3">
-                      <div className="flex items-center justify-between text-xs mb-3">
-                        <div>
-                          <span className="text-stone-400">Total Orders: </span>
-                          <span className="font-bold text-stone-800">{stats.ordersCount}</span>
+                    {/* Garments bought */}
+                    {c.purchasedGarments.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-stone-100">
+                        <div className="text-[11px] font-semibold text-stone-400 uppercase mb-1">
+                          Garments Purchased ({c.purchasedGarments.length})
                         </div>
-                        <div>
-                          <span className="text-stone-400">Lifetime Spent: </span>
-                          <span className="font-bold text-emerald-700 font-mono">
-                            {fmtINR(stats.totalSpent)}
-                          </span>
+                        <div className="flex flex-wrap gap-1">
+                          {c.purchasedGarments.slice(0, 3).map((g, idx) => (
+                            <span
+                              key={idx}
+                              className="text-[11px] bg-stone-50 border border-stone-200 px-2 py-0.5 rounded-md text-stone-700"
+                            >
+                              {g.name} <strong className="text-amber-900">(x{g.totalQty})</strong>
+                            </span>
+                          ))}
                         </div>
                       </div>
+                    )}
+                  </div>
 
+                  <div className="mt-5 pt-4 border-t border-stone-100 flex items-center justify-between">
+                    <div>
+                      <div className="text-[11px] text-stone-400">Lifetime Spend</div>
+                      <div className="text-sm font-bold text-stone-900 font-mono">{fmtINR(c.totalSpent)}</div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => setSelectedHistoryCustomer(c)}
-                        className="w-full py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1"
+                        className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded-lg text-xs font-semibold flex items-center gap-1 border border-amber-200"
                       >
-                        <ShoppingBag size={13} /> Order History ({stats.ordersCount})
+                        <ShoppingBag size={13} /> History
+                      </button>
+                      <button
+                        onClick={() => handleOpenEdit(c)}
+                        className="p-1.5 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-lg transition-colors"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => onDeleteCustomer(c.id)}
+                        className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
-                );
-              })
+                </div>
+              ))
             )}
           </div>
 
-          <div className="mt-4 bg-white rounded-2xl border border-stone-200 overflow-hidden">
+          {/* Cards Pagination Toolbar */}
+          <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-xs">
             <TablePagination
               currentPage={currentPage}
               pageSize={pageSize}
@@ -442,7 +513,7 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
         </div>
       )}
 
-      {/* Add / Edit Customer Modal */}
+      {/* Customer Create/Edit Modal */}
       <Modal
         open={isModalOpen}
         title={editingCustomer ? "Edit Client Profile" : "Register New Client"}
@@ -455,7 +526,7 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. Rahul Sharma"
+              placeholder="e.g. Meera Nambiar"
               className="input-field"
             />
           </Field>
@@ -523,24 +594,28 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
       {/* Customer Purchase History Modal */}
       <Modal
         open={Boolean(selectedHistoryCustomer)}
-        title={`Purchase History — ${selectedHistoryCustomer?.name || ""}`}
+        title={`POS Order History & Garments — ${selectedHistoryCustomer?.name || ""}`}
         onClose={() => setSelectedHistoryCustomer(null)}
         wide
       >
         {selectedHistoryCustomer && (
           <div className="space-y-4">
-            <div className="bg-amber-50/50 p-3 rounded-xl border border-amber-100 flex items-center justify-between text-xs">
+            <div className="bg-amber-50/50 p-3.5 rounded-2xl border border-amber-100 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div>
-                <span className="text-stone-500">Contact: </span>
-                <span className="font-bold text-stone-800">{selectedHistoryCustomer.phone}</span>
+                <span className="text-stone-500">Phone: </span>
+                <span className="font-bold text-stone-800 font-mono">{selectedHistoryCustomer.phone}</span>
               </div>
               <div>
-                <span className="text-stone-500">Total Orders: </span>
-                <span className="font-bold text-stone-800">{activeCustomerSales.length}</span>
+                <span className="text-stone-500">City: </span>
+                <span className="font-bold text-stone-800">{selectedHistoryCustomer.city || "Kerala"}</span>
               </div>
               <div>
-                <span className="text-stone-500">Total Spend: </span>
-                <span className="font-bold text-emerald-800 font-mono">
+                <span className="text-stone-500">Total Invoices: </span>
+                <span className="font-bold text-stone-800">{activeCustomerSales.length} bills</span>
+              </div>
+              <div>
+                <span className="text-stone-500">Lifetime Spend: </span>
+                <span className="font-bold text-emerald-800 font-mono text-sm">
                   {fmtINR(activeCustomerSales.reduce((acc, s) => acc + saleTotal(s), 0))}
                 </span>
               </div>
@@ -548,27 +623,44 @@ export function CustomersView({ customers, sales, products, onAddCustomer, onUpd
 
             {activeCustomerSales.length === 0 ? (
               <div className="py-8 text-center text-stone-400 text-sm">
-                No purchases recorded for this customer yet.
+                No POS transactions recorded for this client yet.
               </div>
             ) : (
-              <div className="divide-y divide-stone-100 max-h-96 overflow-y-auto">
+              <div className="divide-y divide-stone-100 max-h-96 overflow-y-auto space-y-2">
                 {activeCustomerSales.map((s) => (
-                  <div key={s.id} className="py-3 flex items-center justify-between">
-                    <div>
-                      <div className="font-mono font-bold text-amber-900 text-sm">{s.id}</div>
-                      <div className="text-xs text-stone-400">
-                        {fmtDate(s.date)} · Paid via {s.paymentMode}
+                  <div key={s.id} className="pt-3 pb-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-amber-900 text-sm">{s.id}</span>
+                        <span className="text-xs text-stone-400">{fmtDate(s.date)}</span>
+                        <Badge variant={s.paymentMode === "UPI" ? "info" : s.paymentMode === "Cash" ? "success" : "default"}>
+                          {s.paymentMode}
+                        </Badge>
                       </div>
-                      <div className="text-xs text-stone-600 mt-1">
-                        {s.items.map((it) => {
-                          const p = products.find((prod) => prod.id === it.productId);
-                          return p ? `${p.name} (x${it.qty})` : `Item (x${it.qty})`;
-                        }).join(", ")}
+                      <div className="font-mono font-bold text-stone-900 text-sm">
+                        {fmtINR(saleTotal(s))}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-mono font-bold text-stone-900">{fmtINR(saleTotal(s))}</div>
-                      <Badge variant="success">Completed</Badge>
+
+                    {/* Itemized Garments in this invoice */}
+                    <div className="bg-stone-50 p-2 rounded-xl border border-stone-100 space-y-1">
+                      {s.items.map((it, idx) => {
+                        const p = products.find((prod) => prod.id === it.productId);
+                        return (
+                          <div key={idx} className="flex items-center justify-between text-xs text-stone-700">
+                            <div className="flex items-center gap-1.5">
+                              {p && <CategoryTag category={p.category} />}
+                              <span className="font-medium">{p ? p.name : "Garment Item"}</span>
+                              <span className="text-stone-400 font-mono text-[11px]">
+                                ({p?.size || "M"}·{p?.color || ""})
+                              </span>
+                            </div>
+                            <div className="font-mono">
+                              {it.qty} pcs × {fmtINR(it.price)} = <strong>{fmtINR(it.qty * it.price)}</strong>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}

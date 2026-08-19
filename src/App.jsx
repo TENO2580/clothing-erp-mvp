@@ -131,7 +131,20 @@ export default function App() {
 
   /* ------------------- Sales Handlers ------------------- */
 
-  const handleAddSale = (newSale) => {
+  const handleAddSale = (newSale, newCustomer = null) => {
+    // If a new customer was entered at POS counter, save them to customers database!
+    if (newCustomer) {
+      setCustomers((prevCusts) => {
+        const exists = prevCusts.find(
+          (c) => c.phone === newCustomer.phone || c.id === newCustomer.id
+        );
+        if (!exists) {
+          return [newCustomer, ...prevCusts];
+        }
+        return prevCusts;
+      });
+    }
+
     // 1. Add to sales list
     setSales([newSale, ...sales]);
 
@@ -146,7 +159,7 @@ export default function App() {
       });
     });
 
-    showToast(`Invoice ${newSale.id} generated & inventory stock updated!`);
+    showToast(`Invoice ${newSale.id} created & customer records updated!`);
   };
 
   /* ------------------- Purchases Handlers ------------------- */

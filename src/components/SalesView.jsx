@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import {
   Plus, Search, ShoppingCart, Receipt, Printer, User,
-  CheckCircle2, AlertCircle, Trash2, Calendar, Download, BarChart3
+  CheckCircle2, AlertCircle, Trash2, Calendar, Download, BarChart3,
+  UserPlus, Check
 } from "lucide-react";
 import {
   fmtINR, fmtDate, saleTotal, customerName, genId
@@ -20,7 +21,15 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
   const [pageSize, setPageSize] = useState(10);
 
   // New Sale Form State
+  const [customerMode, setCustomerMode] = useState("existing"); // "existing" or "new"
   const [selectedCustomer, setSelectedCustomer] = useState("");
+  const [newCustForm, setNewCustForm] = useState({
+    name: "",
+    phone: "",
+    city: "Kochi",
+    email: "",
+  });
+
   const [paymentMode, setPaymentMode] = useState("UPI");
   const [cartItems, setCartItems] = useState([
     { productId: products[0]?.id || "", qty: 1, price: products[0]?.price || 0 },
@@ -116,10 +125,31 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
       }
     }
 
+    let customerIdForSale = selectedCustomer || null;
+    let newlyCreatedCustomer = null;
+
+    if (customerMode === "new" && newCustForm.name.trim() && newCustForm.phone.trim()) {
+      // Check if already in customers list
+      const existingMatch = customers.find((c) => c.phone === newCustForm.phone.trim());
+      if (existingMatch) {
+        customerIdForSale = existingMatch.id;
+      } else {
+        newlyCreatedCustomer = {
+          id: "c_" + Date.now(),
+          name: newCustForm.name.trim(),
+          phone: newCustForm.phone.trim(),
+          city: newCustForm.city.trim() || "Kochi",
+          email: newCustForm.email.trim() || "",
+          address: "",
+        };
+        customerIdForSale = newlyCreatedCustomer.id;
+      }
+    }
+
     const newSale = {
       id: genId("INV-2026-", 100 + sales.length + 1),
       date: new Date().toISOString().slice(0, 10),
-      customerId: selectedCustomer || null,
+      customerId: customerIdForSale,
       items: cartItems.map((it) => ({
         productId: it.productId,
         qty: Number(it.qty),
@@ -128,10 +158,11 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
       paymentMode,
     };
 
-    onAddSale(newSale);
+    onAddSale(newSale, newlyCreatedCustomer);
     setIsNewSaleOpen(false);
     setCartItems([{ productId: products[0]?.id || "", qty: 1, price: products[0]?.price || 0 }]);
     setSelectedCustomer("");
+    setNewCustForm({ name: "", phone: "", city: "Kochi", email: "" });
     setSelectedInvoice(newSale); // Open receipt preview immediately!
   };
 
@@ -199,7 +230,12 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
           </button>
 
           <button
-            onClick={() => setIsNewSaleOpen(true)}
+            onClick={() => {
+              setCustomerMode("existing");
+              setSelectedCustomer("");
+              setNewCustForm({ name: "", phone: "", city: "Kochi", email: "" });
+              setIsNewSaleOpen(true);
+            }}
             className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex-shrink-0"
           >
             <Plus size={16} /> New POS Invoice
@@ -215,7 +251,7 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
               <tr>
                 <th className="px-4 py-3.5">Invoice ID</th>
                 <th className="px-4 py-3.5">Date</th>
-                <th className="px-4 py-3.5">Customer</th>
+                <th className="px-4 py-3.5">Customer Profile</th>
                 <th className="px-4 py-3.5">Items Summary</th>
                 <th className="px-4 py-3.5 text-center">Payment</th>
                 <th className="px-4 py-3.5 text-right">Amount</th>
@@ -247,7 +283,7 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
                         <div className="font-semibold text-stone-900">
                           {cust ? cust.name : "Walk-in Customer"}
                         </div>
-                        {cust && <div className="text-xs text-stone-400">{cust.phone}</div>}
+                        {cust && <div className="text-xs text-stone-400 font-mono">{cust.phone} · {cust.city || "Kerala"}</div>}
                       </td>
                       <td className="px-4 py-3 text-stone-600 text-xs">
                         {totalItemsCount} garment{totalItemsCount > 1 ? "s" : ""} across {s.items.length} line item{s.items.length > 1 ? "s" : ""}
@@ -295,34 +331,93 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
         wide
       >
         <form onSubmit={handleCreateSale} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Customer (Select Client)">
-              <select
-                value={selectedCustomer}
-                onChange={(e) => setSelectedCustomer(e.target.value)}
-                className="input-field"
-              >
-                <option value="">Walk-in Customer (Guest)</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.phone})
-                  </option>
-                ))}
-              </select>
-            </Field>
+          {/* Customer Selection / New Customer Options */}
+          <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold uppercase tracking-wider text-stone-600">Customer Details</span>
+              <div className="flex items-center gap-1 bg-stone-200/80 p-0.5 rounded-lg text-xs">
+                <button
+                  type="button"
+                  onClick={() => setCustomerMode("existing")}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                    customerMode === "existing" ? "bg-white text-stone-900 shadow-2xs" : "text-stone-600"
+                  }`}
+                >
+                  Select Existing Client
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomerMode("new")}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                    customerMode === "new" ? "bg-white text-amber-900 shadow-2xs font-bold" : "text-stone-600"
+                  }`}
+                >
+                  + Add New Client
+                </button>
+              </div>
+            </div>
 
-            <Field label="Payment Mode">
-              <select
-                value={paymentMode}
-                onChange={(e) => setPaymentMode(e.target.value)}
-                className="input-field"
-              >
-                <option value="UPI">UPI (GooglePay / PhonePe / Paytm)</option>
-                <option value="Cash">Cash at Counter</option>
-                <option value="Card">Debit / Credit Card POS</option>
-              </select>
-            </Field>
+            {customerMode === "existing" ? (
+              <Field label="Choose Registered Client">
+                <select
+                  value={selectedCustomer}
+                  onChange={(e) => setSelectedCustomer(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="">Walk-in Customer (Guest)</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} — {c.phone} ({c.city || "Kerala"})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <Field label="Customer Full Name" required>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Meera Nambiar"
+                    value={newCustForm.name}
+                    onChange={(e) => setNewCustForm({ ...newCustForm, name: e.target.value })}
+                    className="input-field"
+                  />
+                </Field>
+                <Field label="Phone Number" required>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="e.g. 9846012345"
+                    value={newCustForm.phone}
+                    onChange={(e) => setNewCustForm({ ...newCustForm, phone: e.target.value })}
+                    className="input-field font-mono"
+                  />
+                </Field>
+                <Field label="City / Region">
+                  <input
+                    type="text"
+                    placeholder="e.g. Kochi"
+                    value={newCustForm.city}
+                    onChange={(e) => setNewCustForm({ ...newCustForm, city: e.target.value })}
+                    className="input-field"
+                  />
+                </Field>
+              </div>
+            )}
           </div>
+
+          <Field label="Payment Mode">
+            <select
+              value={paymentMode}
+              onChange={(e) => setPaymentMode(e.target.value)}
+              className="input-field"
+            >
+              <option value="UPI">UPI (GooglePay / PhonePe / Paytm)</option>
+              <option value="Cash">Cash at Counter</option>
+              <option value="Card">Debit / Credit Card POS</option>
+            </select>
+          </Field>
 
           <div className="border-t border-stone-100 pt-3">
             <div className="flex items-center justify-between mb-2">
@@ -401,7 +496,7 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
               type="submit"
               className="px-5 py-2.5 text-xs font-bold text-white bg-amber-800 hover:bg-amber-900 rounded-xl shadow-xs"
             >
-              Complete Sale & Deduct Stock
+              Complete Sale & Record Customer
             </button>
           </div>
         </form>
