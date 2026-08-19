@@ -1,18 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Plus, Search, ShoppingCart, Receipt, Printer, User,
   CheckCircle2, AlertCircle, Trash2, Calendar, Download, BarChart3,
-  UserPlus, Check
+  UserPlus, Check, AlertTriangle
 } from "lucide-react";
 import {
   fmtINR, fmtDate, saleTotal, customerName, genId
 } from "../data/seedData";
 import { exportToCSV } from "../utils/exportUtils";
-import { Modal, Badge, SearchInput, Field, TablePagination } from "./UIComponents";
+import { Modal, Badge, SearchInput, Field, TablePagination, CategoryTag } from "./UIComponents";
 
 export function SalesView({ sales, products, customers, onAddSale, onNavigate }) {
   const [search, setSearch] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("All");
+  const [datePreset, setDatePreset] = useState("All");
   const [isNewSaleOpen, setIsNewSaleOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
 
@@ -31,52 +32,57 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
   });
 
   const [paymentMode, setPaymentMode] = useState("UPI");
+  
+  // Find first in-stock product for default cart item
+  const initialProd = products.find((p) => p.stock > 0) || products[0];
   const [cartItems, setCartItems] = useState([
-    { productId: products[0]?.id || "", qty: 1, price: products[0]?.price || 0 },
+    { productId: initialProd?.id || "", qty: 1, price: initialProd?.price || 0 },
   ]);
-
-  const [datePreset, setDatePreset] = useState("All");
 
   // Reset to page 1 on search or filter change
   useEffect(() => {
     setCurrentPage(1);
   }, [search, paymentFilter, datePreset]);
 
-  const filteredSales = sales.filter((s) => {
-    const cust = customerName(customers, s.customerId);
-    const matchSearch =
-      s.id.toLowerCase().includes(search.toLowerCase()) ||
-      cust.toLowerCase().includes(search.toLowerCase());
-    const matchPay = paymentFilter === "All" || s.paymentMode === paymentFilter;
-
-    let matchDate = true;
+  const filteredSales = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
     const yesterday = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 10);
     const thisMonthPrefix = todayStr.slice(0, 7);
 
-    if (datePreset === "today") {
-      matchDate = s.date === todayStr;
-    } else if (datePreset === "yesterday") {
-      matchDate = s.date === yesterday;
-    } else if (datePreset === "7days") {
-      const saleDate = new Date(s.date);
-      const daysDiff = (new Date() - saleDate) / (1000 * 60 * 60 * 24);
-      matchDate = daysDiff >= 0 && daysDiff <= 7;
-    } else if (datePreset === "thismonth") {
-      matchDate = s.date.startsWith(thisMonthPrefix);
-    } else if (datePreset === "30days") {
-      const saleDate = new Date(s.date);
-      const daysDiff = (new Date() - saleDate) / (1000 * 60 * 60 * 24);
-      matchDate = daysDiff >= 0 && daysDiff <= 30;
-    }
+    return sales.filter((s) => {
+      const cust = customerName(customers, s.customerId);
+      const matchSearch =
+        s.id.toLowerCase().includes(search.toLowerCase()) ||
+        cust.toLowerCase().includes(search.toLowerCase());
+      const matchPay = paymentFilter === "All" || s.paymentMode === paymentFilter;
 
-    return matchSearch && matchPay && matchDate;
-  });
+      let matchDate = true;
+      if (datePreset === "today") {
+        matchDate = s.date === todayStr;
+      } else if (datePreset === "yesterday") {
+        matchDate = s.date === yesterday;
+      } else if (datePreset === "7days") {
+        const saleDate = new Date(s.date);
+        const daysDiff = (new Date() - saleDate) / (1000 * 60 * 60 * 24);
+        matchesDate = daysDiff >= 0 && daysDiff <= 7;
+      } else if (datePreset === "thismonth") {
+        matchDate = s.date.startsWith(thisMonthPrefix);
+      } else if (datePreset === "30days") {
+        const saleDate = new Date(s.date);
+        const daysDiff = (new Date() - saleDate) / (1000 * 60 * 60 * 24);
+        matchesDate = daysDiff >= 0 && daysDiff <= 30;
+      }
 
-  const paginatedSales = filteredSales.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  );
+      return matchSearch && matchPay && matchDate;
+    });
+  }, [sales, customers, search, paymentFilter, datePreset]);
+
+  const paginatedSales = useMemo(() => {
+    return filteredSales.slice(
+      (currentPage - 1) * pageSize,
+      currentPage * pageSize
+    );
+  }, [filteredSales, currentPage, pageSize]);
 
   const totalSalesRevenue = sales.reduce((sum, s) => sum + saleTotal(s), 0);
 
@@ -109,9 +115,9 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
   };
 
   const handleAddItem = () => {
-    const firstProd = products[0];
-    if (firstProd) {
-      setCartItems([...cartItems, { productId: firstProd.id, qty: 1, price: firstProd.price }]);
+    const availableProd = products.find((p) => p.stock > 0) || products[0];
+    if (availableProd) {
+      setCartItems([...cartItems, { productId: availableProd.id, qty: 1, price: availableProd.price }]);
     }
   };
 
@@ -136,17 +142,38 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
 
   const cartTotal = cartItems.reduce((sum, item) => sum + item.qty * item.price, 0);
 
+  // Real-time stock validation across cart
+  const stockValidation = useMemo(() => {
+    const needed = {};
+    cartItems.forEach((it) => {
+      needed[it.productId] = (needed[it.productId] || 0) + Number(it.qty);
+    });
+
+    let isValid = true;
+    const errors = [];
+
+    Object.keys(needed).forEach((pid) => {
+      const prod = products.find((p) => p.id === pid);
+      if (!prod) {
+        isValid = false;
+        errors.push("Product not found in inventory.");
+      } else if (prod.stock < needed[pid]) {
+        isValid = false;
+        errors.push(`Insufficient stock for "${prod.name}" (${prod.category} · ${prod.size}/${prod.color} · ${prod.sku}). Available: ${prod.stock} pcs, Requested: ${needed[pid]} pcs.`);
+      }
+    });
+
+    return { isValid, errors, needed };
+  }, [cartItems, products]);
+
   const handleCreateSale = (e) => {
     e.preventDefault();
     if (cartItems.length === 0) return;
 
-    // Check stock availability
-    for (const it of cartItems) {
-      const p = products.find((prod) => prod.id === it.productId);
-      if (p && p.stock < it.qty) {
-        alert(`Insufficient stock for "${p.name}". Available: ${p.stock}, Requested: ${it.qty}`);
-        return;
-      }
+    // Strict stock verification
+    if (!stockValidation.isValid) {
+      alert(stockValidation.errors.join("\n"));
+      return;
     }
 
     let customerIdForSale = selectedCustomer || null;
@@ -184,7 +211,7 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
 
     onAddSale(newSale, newlyCreatedCustomer);
     setIsNewSaleOpen(false);
-    setCartItems([{ productId: products[0]?.id || "", qty: 1, price: products[0]?.price || 0 }]);
+    setCartItems([{ productId: products.find((p) => p.stock > 0)?.id || products[0]?.id || "", qty: 1, price: products[0]?.price || 0 }]);
     setSelectedCustomer("");
     setNewCustForm({ name: "", phone: "", city: "Kochi", email: "" });
     setSelectedInvoice(newSale); // Open receipt preview immediately!
@@ -226,7 +253,7 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
                 onClick={() => setPaymentFilter(mode)}
                 className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
                   paymentFilter === mode
-                    ? "bg-white text-stone-900 shadow-xs"
+                    ? "bg-white text-stone-900 shadow-xs font-bold"
                     : "text-stone-500 hover:text-stone-800"
                 }`}
               >
@@ -459,6 +486,7 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
             </select>
           </Field>
 
+          {/* Line items with real-time stock deduction check */}
           <div className="border-t border-stone-100 pt-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold uppercase tracking-wider text-stone-500">Bill Line Items</span>
@@ -471,52 +499,106 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
               </button>
             </div>
 
-            <div className="space-y-2 max-h-60 overflow-y-auto">
+            <div className="space-y-2.5 max-h-64 overflow-y-auto">
               {cartItems.map((item, idx) => {
                 const selectedProd = products.find((p) => p.id === item.productId);
+                const isOutOfStock = selectedProd ? selectedProd.stock <= 0 : false;
+                const isOverStock = selectedProd ? item.qty > selectedProd.stock : false;
+
                 return (
-                  <div key={idx} className="flex items-center gap-2 bg-stone-50 p-2.5 rounded-xl">
-                    <div className="flex-1">
-                      <select
-                        value={item.productId}
-                        onChange={(e) => handleItemChange(idx, "productId", e.target.value)}
-                        className="input-field text-xs py-1.5"
+                  <div
+                    key={idx}
+                    className={`p-2.5 rounded-xl border transition-colors ${
+                      isOverStock || isOutOfStock
+                        ? "bg-rose-50/70 border-rose-200"
+                        : "bg-stone-50 border-stone-100"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <select
+                          value={item.productId}
+                          onChange={(e) => handleItemChange(idx, "productId", e.target.value)}
+                          className="input-field text-xs py-1.5"
+                        >
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id} disabled={p.stock <= 0}>
+                              [{p.category}] {p.name} ({p.sku}) · Size: {p.size} · Color: {p.color} — {fmtINR(p.price)} {p.stock > 0 ? `(Stock: ${p.stock})` : `[OUT OF STOCK]`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="w-20">
+                        <input
+                          type="number"
+                          min="1"
+                          max={selectedProd ? selectedProd.stock : 999}
+                          value={item.qty}
+                          onChange={(e) => handleItemChange(idx, "qty", Math.max(1, Number(e.target.value)))}
+                          className={`input-field text-xs py-1.5 text-center font-mono ${
+                            isOverStock ? "border-rose-400 bg-rose-50 text-rose-700 font-bold" : ""
+                          }`}
+                        />
+                      </div>
+
+                      <div className="w-24 text-right font-bold text-stone-900 font-mono text-xs">
+                        {fmtINR(item.qty * item.price)}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(idx)}
+                        disabled={cartItems.length === 1}
+                        className="p-1.5 text-stone-400 hover:text-rose-600 disabled:opacity-20"
                       >
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            [{p.category}] {p.name} ({p.size}/{p.color}) — {fmtINR(p.price)} (Stock: {p.stock})
-                          </option>
-                        ))}
-                      </select>
+                        <Trash2 size={14} />
+                      </button>
                     </div>
 
-                    <div className="w-20">
-                      <input
-                        type="number"
-                        min="1"
-                        max={selectedProd ? selectedProd.stock : 999}
-                        value={item.qty}
-                        onChange={(e) => handleItemChange(idx, "qty", Math.max(1, Number(e.target.value)))}
-                        className="input-field text-xs py-1.5 text-center font-mono"
-                      />
-                    </div>
-
-                    <div className="w-24 text-right font-bold text-stone-900 font-mono text-xs">
-                      {fmtINR(item.qty * item.price)}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveItem(idx)}
-                      disabled={cartItems.length === 1}
-                      className="p-1.5 text-stone-400 hover:text-rose-600 disabled:opacity-20"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {/* Variant & Stock Details Pill */}
+                    {selectedProd && (
+                      <div className="mt-1.5 flex items-center justify-between text-[11px] px-1 text-stone-500">
+                        <div className="flex items-center gap-1.5">
+                          <CategoryTag category={selectedProd.category} />
+                          <span className="font-mono text-stone-600">SKU: {selectedProd.sku}</span>
+                          <span>· Size: <strong>{selectedProd.size}</strong></span>
+                          <span>· Color: <strong>{selectedProd.color}</strong></span>
+                        </div>
+                        <div>
+                          {selectedProd.stock <= 0 ? (
+                            <span className="text-rose-600 font-bold flex items-center gap-0.5">
+                              <AlertTriangle size={11} /> Out of Stock (0 pcs)
+                            </span>
+                          ) : isOverStock ? (
+                            <span className="text-rose-600 font-bold flex items-center gap-0.5">
+                              <AlertTriangle size={11} /> Requested {item.qty} exceeds available stock ({selectedProd.stock})!
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-medium">
+                              ✓ {selectedProd.stock} pcs available in stock
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
+
+            {/* Overall Stock Validation Error Box if any */}
+            {!stockValidation.isValid && (
+              <div className="mt-2.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-start gap-2">
+                <AlertCircle size={15} className="text-rose-600 flex-shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <strong className="block font-bold">Stock Check Warning:</strong>
+                  {stockValidation.errors.map((err, i) => (
+                    <div key={i}>{err}</div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-100 flex items-center justify-between">
@@ -534,9 +616,10 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 text-xs font-bold text-white bg-amber-800 hover:bg-amber-900 rounded-xl shadow-xs"
+              disabled={!stockValidation.isValid}
+              className="px-5 py-2.5 text-xs font-bold text-white bg-amber-800 hover:bg-amber-900 disabled:bg-stone-300 disabled:cursor-not-allowed rounded-xl shadow-xs transition-all"
             >
-              Complete Sale & Record Customer
+              Complete Sale & Deduct Stock
             </button>
           </div>
         </form>
@@ -576,7 +659,7 @@ export function SalesView({ sales, products, customers, onAddSale, onNavigate })
                     <div>
                       <div className="font-semibold text-stone-900">{prod ? prod.name : "Garment Item"}</div>
                       <div className="text-stone-400 text-[11px]">
-                        {prod ? `${prod.size} · ${prod.color} · ` : ""}
+                        {prod ? `[${prod.category}] SKU: ${prod.sku} · Size: ${prod.size} · Color: ${prod.color} · ` : ""}
                         Qty: {it.qty} × {fmtINR(it.price)}
                       </div>
                     </div>

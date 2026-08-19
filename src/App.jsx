@@ -148,18 +148,25 @@ export default function App() {
     // 1. Add to sales list
     setSales([newSale, ...sales]);
 
-    // 2. Automatically deduct stock in inventory!
+    // 2. Automatically deduct stock in inventory matching exact product, department, size & color!
     setProducts((prevProducts) => {
+      const soldQuantities = {};
+      newSale.items.forEach((it) => {
+        soldQuantities[it.productId] = (soldQuantities[it.productId] || 0) + Number(it.qty);
+      });
+
       return prevProducts.map((p) => {
-        const itemSold = newSale.items.find((it) => it.productId === p.id);
-        if (itemSold) {
-          return { ...p, stock: Math.max(0, p.stock - itemSold.qty) };
+        const qtyToDeduct = soldQuantities[p.id];
+        if (qtyToDeduct) {
+          const newStock = Math.max(0, p.stock - qtyToDeduct);
+          return { ...p, stock: newStock };
         }
         return p;
       });
     });
 
-    showToast(`Invoice ${newSale.id} created & customer records updated!`);
+    const totalQtyBilled = newSale.items.reduce((sum, it) => sum + Number(it.qty), 0);
+    showToast(`Invoice ${newSale.id} generated · ${totalQtyBilled} garment pcs deducted from stock!`);
   };
 
   /* ------------------- Purchases Handlers ------------------- */
